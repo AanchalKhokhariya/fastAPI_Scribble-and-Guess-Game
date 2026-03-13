@@ -3,27 +3,42 @@
 <head>
     <title>Movie Guessing Game</title>
     <style>
-        #canvas { border: 2px solid #000; cursor: crosshair; background: #fff; }
+        body { font-family: 'Arial', sans-serif; text-align: center; background: #fafafa; color: #333; }
+        #canvas { border: 2px solid #555; background: #fff; border-radius: 4px; cursor: crosshair; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        .box { display: inline-block; width: 30px; border-bottom: 2px solid black; 
-               margin: 5px; text-align: center; font-size: 24px; font-family: monospace; }
-        body { font-family: sans-serif; text-align: center; background: #f4f4f4; }
+        
+        .box-container { margin: 30px auto; display: flex; justify-content: center; flex-wrap: wrap; max-width: 800px; }
+        .letter-input { 
+            width: 40px; height: 50px; font-size: 26px; text-align: center; 
+            margin: 5px; border: 2px solid #ccc; border-radius: 5px; 
+            text-transform: uppercase; outline: none; transition: border-color 0.3s;
+        }
+        .letter-input:focus { border-color: #2196F3; }
+        .vowel { background-color: #f0f0f0; color: #555; cursor: not-allowed; border-color: #ddd; }
+        .space { width: 30px; }
+        
+        #congrats { 
+            font-size: 48px; color: #2ecc71; font-weight: bold; 
+            margin: 20px; display: none; 
+        }
+        button { padding: 10px 20px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>Movie Draw & Guess</h1>
+    <h1>🎬 Movie Guessing Game</h1>
     
     <div id="setup-area">
-        <h3 id="role-display">Waiting for role...</h3>
+        <h3 id="role-display">Initializing...</h3>
         <div id="drawer-input" class="hidden">
-            <input type="text" id="movieInput" placeholder="Enter movie name">
+            <input type="text" id="movieInput" placeholder="Enter movie title...">
             <button onclick="sendMovie()">Start Game</button>
         </div>
     </div>
 
     <div id="game-area" class="hidden">
-        <div id="movie-display"></div>
-        <canvas id="canvas" width="600" height="400"></canvas>
+        <div id="congrats">🎉 YOU GOT IT RIGHT! 🥳</div>
+        <div id="movie-display" class="box-container"></div>
+        <canvas id="canvas" width="800" height="450"></canvas>
     </div>
 
     <script>
@@ -31,6 +46,7 @@
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
         let myRole = "";
+        let targetMovie = "";
         let drawing = false;
 
         ws.onmessage = (event) => {
@@ -38,59 +54,94 @@
             
             if (data.type === "role") {
                 myRole = data.role;
-                document.getElementById('role-display').innerText = "You are the: " + myRole;
-                if (myRole === "drawer") {
-                    document.getElementById('drawer-input').classList.remove('hidden');
-                }
+                document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
+                if (myRole === "drawer") document.getElementById('drawer-input').classList.remove('hidden');
             }
             
             if (data.type === "game_start") {
+                targetMovie = data.full_movie;
                 document.getElementById('setup-area').classList.add('hidden');
                 document.getElementById('game-area').classList.remove('hidden');
-                renderBoxes(data.display);
+                createGuessingBoxes(data.display);
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
-                drawOnCanvas(data.x, data.y, data.isNewPath);
+                draw(data.x, data.y);
             }
         };
 
         function sendMovie() {
-            let movie = document.getElementById('movieInput').value;
-            ws.send(JSON.stringify({type: "set_movie", movie: movie}));
+            let val = document.getElementById('movieInput').value;
+            if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
         }
 
-        function renderBoxes(displayStr) {
+        function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display');
             container.innerHTML = "";
-            displayStr.split("").forEach(char => {
-                let span = document.createElement('span');
-                span.className = char === " " ? "" : "box";
-                span.innerText = char === "_" ? "" : char;
-                container.appendChild(span);
+            
+            displayStr.split("").forEach((char, index) => {
+                if (char === " ") {
+                    let div = document.createElement('div');
+                    div.className = "space";
+                    container.appendChild(div);
+                } else {
+                    let input = document.createElement('input');
+                    input.className = "letter-input";
+                    input.maxLength = 1;
+                    input.dataset.index = index;
+                    
+                    if (char !== "_") {
+                        input.value = char;
+                        input.disabled = true;
+                        input.classList.add("vowel");
+                    } else {
+                        if (myRole === "drawer") input.disabled = true;
+                        input.oninput = () => checkFullWord();
+                    }
+                    container.appendChild(input);
+                }
             });
         }
 
-        // --- Drawing Logic ---
-        canvas.onmousedown = () => { if(myRole === "drawer") drawing = true; };
-        canvas.onmouseup = () => { drawing = false; ctx.beginPath(); };
-        
+        function checkFullWord() {
+            let inputs = document.querySelectorAll('.letter-input');
+            let currentGuess = "";
+            
+            let isComplete = true;
+            let fullUserString = "";
+            
+            let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
+            
+            inputs.forEach(input => {
+                guessArr[input.dataset.index] = input.value.toUpperCase();
+            });
+
+            let finalGuess = guessArr.join("");
+
+            if (finalGuess === targetMovie) {
+                document.getElementById('congrats').style.display = "block";
+                inputs.forEach(i => i.disabled = true);
+            }
+        }
+
+        canvas.onmousedown = () => { if(myRole === "drawer") { drawing = true; ctx.beginPath(); } };
+        canvas.onmouseup = () => { drawing = false; };
         canvas.onmousemove = (e) => {
             if (!drawing || myRole !== "drawer") return;
             let rect = canvas.getBoundingClientRect();
             let x = e.clientX - rect.left;
             let y = e.clientY - rect.top;
             
-            drawOnCanvas(x, y);
+            draw(x, y);
             ws.send(JSON.stringify({type: "drawing", x: x, y: y}));
         };
 
-        function drawOnCanvas(x, y) {
-            ctx.lineWidth = 2;
+        function draw(x, y) {
+            ctx.lineWidth = 3;
             ctx.lineCap = "round";
+            ctx.strokeStyle = "#333";
             ctx.lineTo(x, y);
             ctx.stroke();
-            ctx.beginPath();
             ctx.moveTo(x, y);
         }
     </script>
