@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Movie Guessing Game</title>
+    <style>
+        #canvas { border: 2px solid #000; cursor: crosshair; background: #fff; }
+        .hidden { display: none; }
+        .box { display: inline-block; width: 30px; border-bottom: 2px solid black; 
+               margin: 5px; text-align: center; font-size: 24px; font-family: monospace; }
+        body { font-family: sans-serif; text-align: center; background: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h1>Movie Draw & Guess</h1>
+    
+    <div id="setup-area">
+        <h3 id="role-display">Waiting for role...</h3>
+        <div id="drawer-input" class="hidden">
+            <input type="text" id="movieInput" placeholder="Enter movie name">
+            <button onclick="sendMovie()">Start Game</button>
+        </div>
+    </div>
+
+    <div id="game-area" class="hidden">
+        <div id="movie-display"></div>
+        <canvas id="canvas" width="600" height="400"></canvas>
+    </div>
+
+    <script>
+        let ws = new WebSocket("ws://localhost:8000/ws");
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let myRole = "";
+        let drawing = false;
+
+        ws.onmessage = (event) => {
+            let data = JSON.parse(event.data);
+            
+            if (data.type === "role") {
+                myRole = data.role;
+                document.getElementById('role-display').innerText = "You are the: " + myRole;
+                if (myRole === "drawer") {
+                    document.getElementById('drawer-input').classList.remove('hidden');
+                }
+            }
+            
+            if (data.type === "game_start") {
+                document.getElementById('setup-area').classList.add('hidden');
+                document.getElementById('game-area').classList.remove('hidden');
+                renderBoxes(data.display);
+            }
+
+            if (data.type === "drawing" && myRole === "guesser") {
+                drawOnCanvas(data.x, data.y, data.isNewPath);
+            }
+        };
+
+        function sendMovie() {
+            let movie = document.getElementById('movieInput').value;
+            ws.send(JSON.stringify({type: "set_movie", movie: movie}));
+        }
+
+        function renderBoxes(displayStr) {
+            let container = document.getElementById('movie-display');
+            container.innerHTML = "";
+            displayStr.split("").forEach(char => {
+                let span = document.createElement('span');
+                span.className = char === " " ? "" : "box";
+                span.innerText = char === "_" ? "" : char;
+                container.appendChild(span);
+            });
+        }
+
+        // --- Drawing Logic ---
+        canvas.onmousedown = () => { if(myRole === "drawer") drawing = true; };
+        canvas.onmouseup = () => { drawing = false; ctx.beginPath(); };
+        
+        canvas.onmousemove = (e) => {
+            if (!drawing || myRole !== "drawer") return;
+            let rect = canvas.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
+            
+            drawOnCanvas(x, y);
+            ws.send(JSON.stringify({type: "drawing", x: x, y: y}));
+        };
+
+        function drawOnCanvas(x, y) {
+            ctx.lineWidth = 2;
+            ctx.lineCap = "round";
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+    </script>
+</body>
+</html>
