@@ -6,20 +6,12 @@
         body { font-family: 'Arial', sans-serif; text-align: center; background: #fafafa; color: #333; }
         #canvas { border: 2px solid #555; background: #fff; border-radius: 4px; cursor: crosshair; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        
         .toolbar { margin-bottom: 10px; display: flex; justify-content: center; gap: 10px; }
-        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; transition: 0.2s; }
-        .btn:hover { background: #f0f0f0; }
+        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; }
         .active-tool { background: #2196F3 !important; color: white; border-color: #1976D2; }
         .btn-clear { background: #ff5252; color: white; border: none; }
-        .btn-clear:hover { background: #ff1744; }
-
         .box-container { margin: 20px auto; display: flex; justify-content: center; flex-wrap: wrap; }
-        .letter-input { 
-            width: 40px; height: 50px; font-size: 26px; text-align: center; 
-            margin: 5px; border: 2px solid #ccc; border-radius: 5px; text-transform: uppercase;
-        }
-        .vowel { background-color: #f0f0f0; color: #555; }
+        .letter-input { width: 40px; height: 50px; font-size: 26px; text-align: center; margin: 5px; border: 2px solid #ccc; border-radius: 5px; text-transform: uppercase; }
         .space { width: 30px; }
         #congrats { font-size: 40px; color: #2ecc71; font-weight: bold; margin: 15px; display: none; }
     </style>
@@ -55,7 +47,7 @@
         let myRole = "";
         let targetMovie = "";
         let drawing = false;
-        let currentTool = "draw"; 
+        let currentTool = "draw";
 
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
@@ -77,6 +69,10 @@
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
+                // If the drawer just started a new click, we MUST begin a new path
+                if (data.isNewPath) {
+                    ctx.beginPath();
+                }
                 draw(data.x, data.y, data.tool);
             }
 
@@ -113,7 +109,7 @@
                     input.maxLength = 1;
                     input.dataset.index = index;
                     if (char !== "_") {
-                        input.value = char; input.disabled = true; input.classList.add("vowel");
+                        input.value = char; input.disabled = true;
                     } else {
                         if (myRole === "drawer") input.disabled = true;
                         input.oninput = () => checkFullWord();
@@ -133,8 +129,29 @@
             }
         }
 
-        canvas.onmousedown = () => { if(myRole === "drawer") { drawing = true; ctx.beginPath(); } };
+        // --- DRAWING LOGIC FIX ---
+        canvas.onmousedown = (e) => { 
+            if(myRole === "drawer") { 
+                drawing = true; 
+                ctx.beginPath(); 
+                let rect = canvas.getBoundingClientRect();
+                let x = e.clientX - rect.left;
+                let y = e.clientY - rect.top;
+                
+                // Send an initial point with isNewPath: true
+                ws.send(JSON.stringify({
+                    type: "drawing", 
+                    x: x, 
+                    y: y, 
+                    tool: currentTool, 
+                    isNewPath: true 
+                }));
+                draw(x, y, currentTool);
+            } 
+        };
+
         canvas.onmouseup = () => { drawing = false; };
+        
         canvas.onmousemove = (e) => {
             if (!drawing || myRole !== "drawer") return;
             let rect = canvas.getBoundingClientRect();
@@ -142,12 +159,20 @@
             let y = e.clientY - rect.top;
             
             draw(x, y, currentTool);
-            ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool}));
+            // Send coordinate with isNewPath: false because we are dragging
+            ws.send(JSON.stringify({
+                type: "drawing", 
+                x: x, 
+                y: y, 
+                tool: currentTool, 
+                isNewPath: false 
+            }));
         };
 
         function draw(x, y, tool) {
             ctx.lineWidth = (tool === 'erase') ? 20 : 3;
             ctx.lineCap = "round";
+            ctx.lineJoin = "round"; // Smoother corners
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : "#333333";
             ctx.lineTo(x, y);
             ctx.stroke();
