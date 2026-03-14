@@ -40,7 +40,7 @@
         <canvas id="canvas" width="800" height="450"></canvas>
     </div>
 
-    <script>
+        <script>
         let ws = new WebSocket("ws://localhost:8000/ws");
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
@@ -52,12 +52,22 @@
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             
-            if (data.type === "role") {
+            // Handle initialization (Refresh/Join)
+            if (data.type === "init") {
                 myRole = data.role;
                 document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
+                
                 if (myRole === "drawer") {
                     document.getElementById('drawer-input').classList.remove('hidden');
                     document.getElementById('controls').classList.remove('hidden');
+                }
+
+                // If a movie is already being played, show the game area
+                if (data.movie_set) {
+                    targetMovie = data.full_movie;
+                    document.getElementById('setup-area').classList.add('hidden');
+                    document.getElementById('game-area').classList.remove('hidden');
+                    createGuessingBoxes(data.display);
                 }
             }
             
@@ -69,10 +79,7 @@
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
-                // If the drawer just started a new click, we MUST begin a new path
-                if (data.isNewPath) {
-                    ctx.beginPath();
-                }
+                if (data.isNewPath) ctx.beginPath();
                 draw(data.x, data.y, data.tool);
             }
 
@@ -129,7 +136,6 @@
             }
         }
 
-        // --- DRAWING LOGIC FIX ---
         canvas.onmousedown = (e) => { 
             if(myRole === "drawer") { 
                 drawing = true; 
@@ -138,7 +144,6 @@
                 let x = e.clientX - rect.left;
                 let y = e.clientY - rect.top;
                 
-                // Send an initial point with isNewPath: true
                 ws.send(JSON.stringify({
                     type: "drawing", 
                     x: x, 
@@ -159,7 +164,6 @@
             let y = e.clientY - rect.top;
             
             draw(x, y, currentTool);
-            // Send coordinate with isNewPath: false because we are dragging
             ws.send(JSON.stringify({
                 type: "drawing", 
                 x: x, 
@@ -172,7 +176,7 @@
         function draw(x, y, tool) {
             ctx.lineWidth = (tool === 'erase') ? 20 : 3;
             ctx.lineCap = "round";
-            ctx.lineJoin = "round"; // Smoother corners
+            ctx.lineJoin = "round"; 
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : "#333333";
             ctx.lineTo(x, y);
             ctx.stroke();
