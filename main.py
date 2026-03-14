@@ -49,11 +49,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 manager.game_state["movie"] = movie_name
                 manager.game_state["display_name"] = process_movie(movie_name)
                 await manager.broadcast({
-                    "type": "game_start",
-                    "display": manager.game_state["display_name"],
+                    "type": "game_start", 
+                    "display": manager.game_state["display_name"], 
                     "full_movie": movie_name
                 })
-            elif data["type"] == "drawing":
+            
+            elif data["type"] in ["drawing", "clear"]:
                 await manager.broadcast(data)
     except WebSocketDisconnect:
         manager.disconnect(websocket)

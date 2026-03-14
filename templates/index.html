@@ -7,21 +7,21 @@
         #canvas { border: 2px solid #555; background: #fff; border-radius: 4px; cursor: crosshair; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .hidden { display: none; }
         
-        .box-container { margin: 30px auto; display: flex; justify-content: center; flex-wrap: wrap; max-width: 800px; }
+        .toolbar { margin-bottom: 10px; display: flex; justify-content: center; gap: 10px; }
+        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; transition: 0.2s; }
+        .btn:hover { background: #f0f0f0; }
+        .active-tool { background: #2196F3 !important; color: white; border-color: #1976D2; }
+        .btn-clear { background: #ff5252; color: white; border: none; }
+        .btn-clear:hover { background: #ff1744; }
+
+        .box-container { margin: 20px auto; display: flex; justify-content: center; flex-wrap: wrap; }
         .letter-input { 
             width: 40px; height: 50px; font-size: 26px; text-align: center; 
-            margin: 5px; border: 2px solid #ccc; border-radius: 5px; 
-            text-transform: uppercase; outline: none; transition: border-color 0.3s;
+            margin: 5px; border: 2px solid #ccc; border-radius: 5px; text-transform: uppercase;
         }
-        .letter-input:focus { border-color: #2196F3; }
-        .vowel { background-color: #f0f0f0; color: #555; cursor: not-allowed; border-color: #ddd; }
+        .vowel { background-color: #f0f0f0; color: #555; }
         .space { width: 30px; }
-        
-        #congrats { 
-            font-size: 48px; color: #2ecc71; font-weight: bold; 
-            margin: 20px; display: none; 
-        }
-        button { padding: 10px 20px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px; }
+        #congrats { font-size: 40px; color: #2ecc71; font-weight: bold; margin: 15px; display: none; }
     </style>
 </head>
 <body>
@@ -31,13 +31,20 @@
         <h3 id="role-display">Initializing...</h3>
         <div id="drawer-input" class="hidden">
             <input type="text" id="movieInput" placeholder="Enter movie title...">
-            <button onclick="sendMovie()">Start Game</button>
+            <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
         </div>
     </div>
 
     <div id="game-area" class="hidden">
         <div id="congrats">🎉 YOU GOT IT RIGHT! 🥳</div>
         <div id="movie-display" class="box-container"></div>
+        
+        <div id="controls" class="toolbar hidden">
+            <button id="drawBtn" class="btn active-tool" onclick="setTool('draw')">✏️ Pencil</button>
+            <button id="eraseBtn" class="btn" onclick="setTool('erase')">🧽 Eraser</button>
+            <button class="btn btn-clear" onclick="clearCanvasSync()">🗑️ Clear All</button>
+        </div>
+
         <canvas id="canvas" width="800" height="450"></canvas>
     </div>
 
@@ -48,6 +55,7 @@
         let myRole = "";
         let targetMovie = "";
         let drawing = false;
+        let currentTool = "draw"; 
 
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
@@ -55,7 +63,10 @@
             if (data.type === "role") {
                 myRole = data.role;
                 document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
-                if (myRole === "drawer") document.getElementById('drawer-input').classList.remove('hidden');
+                if (myRole === "drawer") {
+                    document.getElementById('drawer-input').classList.remove('hidden');
+                    document.getElementById('controls').classList.remove('hidden');
+                }
             }
             
             if (data.type === "game_start") {
@@ -66,9 +77,24 @@
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
-                draw(data.x, data.y);
+                draw(data.x, data.y, data.tool);
+            }
+
+            if (data.type === "clear") {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         };
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.getElementById('drawBtn').classList.toggle('active-tool', tool === 'draw');
+            document.getElementById('eraseBtn').classList.toggle('active-tool', tool === 'erase');
+        }
+
+        function clearCanvasSync() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ws.send(JSON.stringify({type: "clear"}));
+        }
 
         function sendMovie() {
             let val = document.getElementById('movieInput').value;
@@ -78,22 +104,16 @@
         function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display');
             container.innerHTML = "";
-            
             displayStr.split("").forEach((char, index) => {
                 if (char === " ") {
-                    let div = document.createElement('div');
-                    div.className = "space";
-                    container.appendChild(div);
+                    let div = document.createElement('div'); div.className = "space"; container.appendChild(div);
                 } else {
                     let input = document.createElement('input');
                     input.className = "letter-input";
                     input.maxLength = 1;
                     input.dataset.index = index;
-                    
                     if (char !== "_") {
-                        input.value = char;
-                        input.disabled = true;
-                        input.classList.add("vowel");
+                        input.value = char; input.disabled = true; input.classList.add("vowel");
                     } else {
                         if (myRole === "drawer") input.disabled = true;
                         input.oninput = () => checkFullWord();
@@ -105,20 +125,9 @@
 
         function checkFullWord() {
             let inputs = document.querySelectorAll('.letter-input');
-            let currentGuess = "";
-            
-            let isComplete = true;
-            let fullUserString = "";
-            
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
-            
-            inputs.forEach(input => {
-                guessArr[input.dataset.index] = input.value.toUpperCase();
-            });
-
-            let finalGuess = guessArr.join("");
-
-            if (finalGuess === targetMovie) {
+            inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
+            if (guessArr.join("") === targetMovie) {
                 document.getElementById('congrats').style.display = "block";
                 inputs.forEach(i => i.disabled = true);
             }
@@ -132,14 +141,14 @@
             let x = e.clientX - rect.left;
             let y = e.clientY - rect.top;
             
-            draw(x, y);
-            ws.send(JSON.stringify({type: "drawing", x: x, y: y}));
+            draw(x, y, currentTool);
+            ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool}));
         };
 
-        function draw(x, y) {
-            ctx.lineWidth = 3;
+        function draw(x, y, tool) {
+            ctx.lineWidth = (tool === 'erase') ? 20 : 3;
             ctx.lineCap = "round";
-            ctx.strokeStyle = "#333";
+            ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : "#333333";
             ctx.lineTo(x, y);
             ctx.stroke();
             ctx.moveTo(x, y);
