@@ -45,7 +45,8 @@
     </div>
 
     <script>
-        let ws = new WebSocket("ws://localhost:8000/ws");
+        let protocol = location.protocol === "https:" ? "wss" : "ws";
+        let ws = new WebSocket(`${protocol}://${location.host}/ws`);
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
         let myRole = "";
@@ -57,7 +58,6 @@
             let data = JSON.parse(event.data);
             
             if (data.type === "init") {
-                // Reset everything for a fresh start
                 myRole = data.role;
                 targetMovie = "";
                 ctx.clearRect(0, 0, canvas.width, canvas.height);

@@ -34,18 +34,15 @@ class ConnectionManager:
             self.game_state["drawer_id"] = None
 
     async def restart_game(self):
-        # Reset game state
         self.game_state["movie"] = ""
         self.game_state["display_name"] = ""
         
         if not self.active_connections:
             return
 
-        # Pick a new drawer randomly
         old_drawer_id = self.game_state["drawer_id"]
         potential_drawers = self.active_connections
         
-        # Try to pick someone who wasn't the last drawer
         if len(potential_drawers) > 1:
             potential_drawers = [ws for ws in potential_drawers if id(ws) != old_drawer_id]
         
@@ -53,14 +50,16 @@ class ConnectionManager:
         self.game_state["drawer_id"] = id(new_drawer_ws)
         self.game_state["drawer_assigned"] = True
 
-        # Notify everyone of their new roles and reset UI
         for ws in self.active_connections:
             new_role = "drawer" if id(ws) == self.game_state["drawer_id"] else "guesser"
             await ws.send_json({"type": "init", "role": new_role, "movie_set": False})
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_json(message)
+        for connection in self.active_connections[:]:
+            try:
+                await connection.send_json(message)
+            except:
+                self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
