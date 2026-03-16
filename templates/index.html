@@ -18,7 +18,8 @@
     </style>
 </head>
 <body>
-    <h1>🎬 Movie Guessing Game</h1>
+    <h1 id="game-title">🎬 Movie Guessing Game</h1>
+    <p id="player-welcome"></p>
     
     <div id="setup-area">
         <h3 id="role-display">Joining...</h3>
@@ -30,7 +31,7 @@
 
     <div id="game-area" class="hidden">
         <div id="congrats-area">
-            <div id="congrats-text">🎉 CORRECT! 🥳</div>
+            <div id="congrats-text"></div>
             <button class="btn-restart" onclick="requestRestart()">Play Again (New Roles)</button>
         </div>
 
@@ -45,6 +46,10 @@
     </div>
 
     <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const myName = urlParams.get('name') || "Anonymous";
+        document.getElementById('player-welcome').innerText = "Playing as: " + myName;
+
         let protocol = location.protocol === "https:" ? "wss" : "ws";
         let ws = new WebSocket(`${protocol}://${location.host}/ws`);
         let canvas = document.getElementById('canvas');
@@ -82,6 +87,11 @@
             
             if (data.type === "game_start") {
                 setupGameUI(data.display, data.full_movie);
+            }
+
+            if (data.type === "announcement") {
+                document.getElementById('congrats-text').innerText = data.message;
+                document.getElementById('congrats-area').style.display = "block";
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
@@ -137,12 +147,11 @@
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
             inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
             if (guessArr.join("") === targetMovie) {
-                document.getElementById('congrats-area').style.display = "block";
+                ws.send(JSON.stringify({type: "won", name: myName}));
                 inputs.forEach(i => i.disabled = true);
             }
         }
 
-        // --- DRAWING LOGIC ---
         canvas.onmousedown = (e) => { 
             if(myRole === "drawer") { 
                 drawing = true; ctx.beginPath(); 
@@ -166,7 +175,11 @@
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : "#333333";
             ctx.lineTo(x, y); ctx.stroke(); ctx.moveTo(x, y);
         }
-        function setTool(t) { currentTool = t; }
+        function setTool(t) {
+            currentTool = t;
+            document.getElementById('drawBtn').classList.toggle('active-tool', t === 'draw');
+            document.getElementById('eraseBtn').classList.toggle('active-tool', t === 'erase');
+        }
         function clearCanvasSync() { ctx.clearRect(0, 0, canvas.width, canvas.height); ws.send(JSON.stringify({type: "clear"})); }
     </script>
 </body>

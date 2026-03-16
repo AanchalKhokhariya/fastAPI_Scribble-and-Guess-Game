@@ -4,37 +4,34 @@
     <title>My Awesome Game</title>
     <style>
         body {
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #faf8f8; 
-            font-family: 'Arial', sans-serif;
+            margin: 0; height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            background-color: #faf8f8; font-family: 'Arial', sans-serif;
         }
-
+        .name-input {
+            padding: 15px; font-size: 18px; border: 2px solid #ddd;
+            border-radius: 10px; margin-bottom: 20px; width: 250px; text-align: center;
+        }
         .start-btn {
-            padding: 20px 40px;
-            font-size: 24px;
-            color: white;
-            background-color: #ff4757;
-            text-decoration: none;
-            border-radius: 50px;
-            transition: transform 0.2s, background-color 0.2s;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            padding: 20px 40px; font-size: 24px; color: white;
+            background-color: #ff4757; text-decoration: none;
+            border-radius: 50px; transition: transform 0.2s, background-color 0.2s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3); border: none; cursor: pointer;
         }
-
-        .start-btn:hover {
-            background-color: #ff6b81;
-            transform: scale(1.1);
-        }
+        .start-btn:hover { background-color: #ff6b81; transform: scale(1.1); }
     </style>
 </head>
 <body>
+    <input type="text" id="playerName" class="name-input" placeholder="Enter Your Name">
+    <button onclick="startGame()" class="start-btn">START GAME</button>
 
-    <a href="/game" class="start-btn">
-        START GAME
-    </a>
-
+    <script>
+        function startGame() {
+            const name = document.getElementById('playerName').value.trim();
+            if (!name) { alert("Please enter your name!"); return; }
+            // Redirect with the name in the URL
+            window.location.href = `/game?name=${encodeURIComponent(name)}`;
+        }
+    </script>
 </body>
 </html>

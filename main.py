@@ -59,7 +59,8 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except:
-                self.active_connections.remove(connection)
+                if connection in self.active_connections:
+                    self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
@@ -74,7 +75,6 @@ async def get(request: Request):
 @app.get("/game")
 async def get_game(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
-
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -99,6 +99,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "game_start",
                     "display": manager.game_state["display_name"],
                     "full_movie": movie_name
+                })
+            elif data["type"] == "won":
+                await manager.broadcast({
+                    "type": "announcement",
+                    "message": f"🎉 {data['name']} guessed the movie correctly!"
                 })
             elif data["type"] == "restart":
                 await manager.restart_game()
