@@ -27,13 +27,19 @@ class ConnectionManager:
         return "guesser"
 
     def disconnect(self, websocket: WebSocket):
+        is_drawer = (id(websocket) == self.game_state["drawer_id"])
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        if id(websocket) == self.game_state["drawer_id"]:
+        
+        if is_drawer:
             self.game_state["drawer_assigned"] = False
             self.game_state["drawer_id"] = None
+            self.game_state["movie"] = ""
+            return True 
+        return False
 
     async def restart_game(self):
+        """This is the missing method that caused your error."""
         self.game_state["movie"] = ""
         self.game_state["display_name"] = ""
         
@@ -43,6 +49,7 @@ class ConnectionManager:
         old_drawer_id = self.game_state["drawer_id"]
         potential_drawers = self.active_connections
         
+        # Shuffle roles: pick a new random drawer
         if len(potential_drawers) > 1:
             potential_drawers = [ws for ws in potential_drawers if id(ws) != old_drawer_id]
         
@@ -50,9 +57,14 @@ class ConnectionManager:
         self.game_state["drawer_id"] = id(new_drawer_ws)
         self.game_state["drawer_assigned"] = True
 
+        # Send 'init' to everyone to reset their screens and roles
         for ws in self.active_connections:
             new_role = "drawer" if id(ws) == self.game_state["drawer_id"] else "guesser"
-            await ws.send_json({"type": "init", "role": new_role, "movie_set": False})
+            await ws.send_json({
+                "type": "init", 
+                "role": new_role, 
+                "movie_set": False
+            })
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections[:]:
@@ -101,13 +113,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     "full_movie": movie_name
                 })
             elif data["type"] == "won":
-                await manager.broadcast({
-                    "type": "announcement",
-                    "message": f"🎉 {data['name']} guessed the movie correctly!"
-                })
+                await manager.broadcast({"type": "announcement", "message": f"🎉 {data['name']} guessed correctly!"})
             elif data["type"] == "restart":
                 await manager.restart_game()
             elif data["type"] in ["drawing", "clear"]:
                 await manager.broadcast(data)
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        if manager.disconnect(websocket):
+            await manager.broadcast({"type": "drawer_disconnected"})
