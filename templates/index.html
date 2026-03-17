@@ -180,7 +180,24 @@
                         input.disabled = true; 
                     } else {
                         if (myRole === "drawer") input.disabled = true;
-                        input.oninput = () => checkFullWord();
+                        input.oninput = (e) => {
+                            let val = e.target.value.toUpperCase();
+                            e.target.value = val;
+
+                            if (!val) return;
+
+                            let inputs = Array.from(document.querySelectorAll('.letter-input'));
+                            let currentIndex = inputs.indexOf(e.target);
+
+                            for (let i = currentIndex + 1; i < inputs.length; i++) {
+                                if (!inputs[i].disabled && inputs[i].value === "") {
+                                    inputs[i].focus();
+                                    break;
+                                }
+                            }
+
+                            checkFullWord();
+                        };
                     }
 
                     container.appendChild(input);

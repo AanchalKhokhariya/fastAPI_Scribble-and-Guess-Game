@@ -5,8 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
 
 app = FastAPI()
-
-# Enable CORS for cross-origin stability (essential for ngrok)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
