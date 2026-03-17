@@ -7,18 +7,19 @@
         #canvas { border: 2px solid #555; background: #fff; cursor: crosshair; }
         .hidden { display: none !important; }
         .toolbar { margin-bottom: 10px; display: flex; justify-content: center; gap: 10px; }
-        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
         .active-tool { background: #2196F3; color: white; }
         .box-container { margin: 20px auto; display: flex; justify-content: center; flex-wrap: wrap; }
         .letter-input { width: 40px; height: 50px; font-size: 26px; text-align: center; margin: 5px; border: 2px solid #ccc; border-radius: 5px; text-transform: uppercase; }
         .space { width: 30px; }
         #congrats-area { margin: 20px; display: none; }
-        #congrats-text { font-size: 32px; color: #2ecc71; font-weight: bold; }
-        .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 10px 25px; margin-top: 10px; }
+        #congrats-text { font-size: 28px; color: #2ecc71; font-weight: bold; }
+        #movie-reveal { font-size: 24px; color: #333; margin: 10px; font-weight: bold; }
+        .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 10px 25px; cursor: pointer; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h1 id="game-title">🎬 Movie Guessing Game</h1>
+    <h1>🎬 Movie Guessing Game</h1>
     <p id="player-welcome"></p>
     
     <div id="setup-area">
@@ -32,6 +33,7 @@
     <div id="game-area" class="hidden">
         <div id="congrats-area">
             <div id="congrats-text"></div>
+            <div id="movie-reveal" class="hidden">The movie was: <span id="revealed-name" style="color: #ff4757;"></span></div>
             <button class="btn-restart" onclick="requestRestart()">Play Again (New Roles)</button>
         </div>
 
@@ -42,7 +44,7 @@
             <button id="eraseBtn" class="btn" onclick="setTool('erase')">🧽 Eraser</button>
             <button class="btn" onclick="clearCanvasSync()">🗑️ Clear</button>
         </div>
-        <canvas id="canvas" width="800" height="400"></canvas>
+        <canvas id="canvas" width="800" height="450"></canvas>
     </div>
 
     <script>
@@ -54,24 +56,23 @@
         let ws = new WebSocket(`${protocol}://${location.host}/ws`);
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
-        let myRole = "";
-        let targetMovie = "";
-        let drawing = false;
-        let currentTool = "draw";
+        let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
 
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             
             if (data.type === "drawer_disconnected") {
-                alert("The Drawer has left the game. Redirecting to start page...");
+                alert("The Drawer has left the game. Redirecting...");
                 window.location.href = "/";
                 return;
             }
+
             if (data.type === "init") {
                 myRole = data.role;
                 targetMovie = "";
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 document.getElementById('congrats-area').style.display = "none";
+                document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
                 
                 if (myRole === "drawer") {
@@ -82,21 +83,24 @@
                     document.getElementById('controls').classList.add('hidden');
                 }
 
-                if (data.movie_set) {
-                    setupGameUI(data.display, data.full_movie);
-                } else {
+                if (data.movie_set) setupGameUI(data.display, data.full_movie);
+                else {
                     document.getElementById('setup-area').classList.remove('hidden');
                     document.getElementById('game-area').classList.add('hidden');
                 }
             }
             
-            if (data.type === "game_start") {
-                setupGameUI(data.display, data.full_movie);
-            }
+            if (data.type === "game_start") setupGameUI(data.display, data.full_movie);
 
             if (data.type === "announcement") {
+                // Stabilize the winner name and reveal the movie to everyone
                 document.getElementById('congrats-text').innerText = data.message;
                 document.getElementById('congrats-area').style.display = "block";
+                if (data.reveal) {
+                    document.getElementById('movie-reveal').classList.remove('hidden');
+                    document.getElementById('revealed-name').innerText = data.reveal;
+                }
+                document.querySelectorAll('.letter-input').forEach(i => i.disabled = true);
             }
 
             if (data.type === "drawing" && myRole === "guesser") {
@@ -104,9 +108,7 @@
                 draw(data.x, data.y, data.tool);
             }
 
-            if (data.type === "clear") {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
+            if (data.type === "clear") ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
 
         function setupGameUI(display, full) {
@@ -116,10 +118,7 @@
             createGuessingBoxes(display);
         }
 
-        function requestRestart() {
-            ws.send(JSON.stringify({type: "restart"}));
-        }
-
+        function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
         function sendMovie() {
             let val = document.getElementById('movieInput').value;
             if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
@@ -136,9 +135,8 @@
                     input.className = "letter-input";
                     input.maxLength = 1;
                     input.dataset.index = index;
-                    if (char !== "_") {
-                        input.value = char; input.disabled = true;
-                    } else {
+                    if (char !== "_") { input.value = char; input.disabled = true; } 
+                    else {
                         if (myRole === "drawer") input.disabled = true;
                         input.oninput = () => checkFullWord();
                     }
@@ -148,12 +146,14 @@
         }
 
         function checkFullWord() {
+            // Check if someone else already won to prevent overwriting
+            if (document.getElementById('congrats-area').style.display === "block") return;
+
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
             inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
             if (guessArr.join("") === targetMovie) {
                 ws.send(JSON.stringify({type: "won", name: myName}));
-                inputs.forEach(i => i.disabled = true);
             }
         }
 
