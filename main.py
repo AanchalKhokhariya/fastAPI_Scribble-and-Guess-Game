@@ -1,9 +1,20 @@
 import random
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
 
 app = FastAPI()
+
+# Enable CORS for cross-origin stability (essential for ngrok)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 templates = Jinja2Templates(directory="templates")
 
 class ConnectionManager:
@@ -11,13 +22,14 @@ class ConnectionManager:
         self.active_connections: Dict[int, WebSocket] = {}
         self.player_names: Dict[int, str] = {}
         self.draw_history: List[dict] = [] 
+        
         self.game_state = {
             "movie": "",
             "display_name": "",
             "drawer_assigned": False,
             "drawer_id": None,
             "is_round_active": False,
-            "winner_announcement": None, 
+            "winner_announcement": None,
             "revealed_movie": None
         }
 
@@ -36,6 +48,7 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket):
         ws_id = id(websocket)
         is_drawer = (ws_id == self.game_state["drawer_id"])
+        
         if ws_id in self.active_connections:
             del self.active_connections[ws_id]
         if ws_id in self.player_names:
@@ -49,12 +62,16 @@ class ConnectionManager:
 
     async def restart_game(self):
         self.game_state.update({
-            "movie": "", "display_name": "", "is_round_active": False,
-            "winner_announcement": None, "revealed_movie": None
+            "movie": "", 
+            "display_name": "", 
+            "is_round_active": False,
+            "winner_announcement": None, 
+            "revealed_movie": None
         })
         self.draw_history = [] 
         
-        if not self.active_connections: return
+        if not self.active_connections:
+            return
 
         old_drawer_id = self.game_state["drawer_id"]
         conn_ids = list(self.active_connections.keys())
@@ -68,7 +85,9 @@ class ConnectionManager:
         for ws_id, ws in self.active_connections.items():
             role = "drawer" if ws_id == new_drawer_id else "guesser"
             await ws.send_json({
-                "type": "init", "role": role, "movie_set": False,
+                "type": "init", 
+                "role": role, 
+                "movie_set": False, 
                 "drawer_name": self.player_names[new_drawer_id]
             })
 
@@ -98,7 +117,6 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
     role = await manager.connect(websocket, name)
     drawer_name = manager.player_names.get(manager.game_state["drawer_id"], "Unknown")
     
-
     await websocket.send_json({
         "type": "init", 
         "role": role,
@@ -114,6 +132,7 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
     try:
         while True:
             data = await websocket.receive_json()
+            
             if data["type"] == "set_movie":
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["display_name"] = process_movie(manager.game_state["movie"])
@@ -133,14 +152,18 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                     "message": manager.game_state["winner_announcement"],
                     "reveal": manager.game_state["revealed_movie"]
                 })
+            
             elif data["type"] == "restart":
                 await manager.restart_game()
+            
             elif data["type"] == "drawing":
                 manager.draw_history.append(data) 
                 await manager.broadcast(data)
+            
             elif data["type"] == "clear":
-                manager.draw_history = [] 
+                manager.draw_history = []
                 await manager.broadcast(data)
+                
     except WebSocketDisconnect:
         if manager.disconnect(websocket):
             await manager.broadcast({"type": "drawer_disconnected"})

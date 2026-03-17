@@ -71,8 +71,16 @@
             }
 
             if (data.type === "init") {
-                myRole = data.role; targetMovie = "";
+                myRole = data.role; 
+                targetMovie = "";
+
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // ✅ FIX: Reset previous round UI
+                document.getElementById('congrats-area').style.display = "none";
+                document.getElementById('movie-reveal').classList.add('hidden');
+                document.getElementById('revealed-name').innerText = "";
+
                 document.getElementById('role-display').innerText = "Your Role: " + myRole.toUpperCase();
                 
                 if (myRole === "drawer") {
@@ -102,6 +110,11 @@
             }
             
             if (data.type === "game_start") {
+                // ✅ Reset UI again for safety
+                document.getElementById('congrats-area').style.display = "none";
+                document.getElementById('movie-reveal').classList.add('hidden');
+                document.getElementById('revealed-name').innerText = "";
+
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
             }
@@ -141,24 +154,35 @@
         }
 
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
+
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
             if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
         }
 
         function createGuessingBoxes(displayStr) {
-            let container = document.getElementById('movie-display'); container.innerHTML = "";
+            let container = document.getElementById('movie-display'); 
+            container.innerHTML = "";
+
             displayStr.split("").forEach((char, index) => {
                 if (char === " ") {
-                    let div = document.createElement('div'); div.className = "space"; container.appendChild(div);
+                    let div = document.createElement('div'); 
+                    div.className = "space"; 
+                    container.appendChild(div);
                 } else {
                     let input = document.createElement('input');
-                    input.className = "letter-input"; input.maxLength = 1; input.dataset.index = index;
-                    if (char !== "_") { input.value = char; input.disabled = true; } 
-                    else {
+                    input.className = "letter-input"; 
+                    input.maxLength = 1; 
+                    input.dataset.index = index;
+
+                    if (char !== "_") { 
+                        input.value = char; 
+                        input.disabled = true; 
+                    } else {
                         if (myRole === "drawer") input.disabled = true;
                         input.oninput = () => checkFullWord();
                     }
+
                     container.appendChild(input);
                 }
             });
@@ -166,36 +190,52 @@
 
         function checkFullWord() {
             if (document.getElementById('congrats-area').style.display === "block") return;
+
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
-            inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
-            if (guessArr.join("") === targetMovie) ws.send(JSON.stringify({type: "won", name: myName}));
+
+            inputs.forEach(input => { 
+                guessArr[input.dataset.index] = input.value.toUpperCase(); 
+            });
+
+            if (guessArr.join("") === targetMovie) {
+                ws.send(JSON.stringify({type: "won", name: myName}));
+            }
         }
 
         canvas.onmousedown = (e) => { 
             if(myRole === "drawer") { 
-                drawing = true; ctx.beginPath(); 
+                drawing = true; 
+                ctx.beginPath(); 
                 let rect = canvas.getBoundingClientRect();
                 let x = e.clientX - rect.left, y = e.clientY - rect.top;
                 let color = document.getElementById('colorPicker').value;
+
                 ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: true, color: color }));
                 draw(x, y, currentTool, color);
             } 
         };
+
         canvas.onmouseup = () => { drawing = false; };
+
         canvas.onmousemove = (e) => {
             if (!drawing || myRole !== "drawer") return;
+
             let rect = canvas.getBoundingClientRect();
             let x = e.clientX - rect.left, y = e.clientY - rect.top;
             let color = document.getElementById('colorPicker').value;
+
             draw(x, y, currentTool, color);
             ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: false, color: color }));
         };
         
         function draw(x, y, tool, color) {
-            ctx.lineWidth = (tool === 'erase') ? 25 : 4; ctx.lineCap = "round";
+            ctx.lineWidth = (tool === 'erase') ? 25 : 4; 
+            ctx.lineCap = "round";
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : color;
-            ctx.lineTo(x, y); ctx.stroke(); ctx.moveTo(x, y);
+            ctx.lineTo(x, y); 
+            ctx.stroke(); 
+            ctx.moveTo(x, y);
         }
 
         function setTool(t) {
@@ -204,7 +244,10 @@
             document.getElementById('eraseBtn').classList.toggle('active-tool', t === 'erase');
         }
 
-        function clearCanvasSync() { ctx.clearRect(0, 0, canvas.width, canvas.height); ws.send(JSON.stringify({type: "clear"})); }
+        function clearCanvasSync() { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            ws.send(JSON.stringify({type: "clear"})); 
+        }
     </script>
 </body>
 </html>
