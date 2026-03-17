@@ -3,30 +3,57 @@
 <head>
     <title>Movie Guessing Game</title>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; background: #fafafa; }
-        #canvas { border: 2px solid #555; background: #fff; cursor: crosshair; }
+        body { font-family: 'Arial', sans-serif; text-align: center; background: #fafafa; margin: 0; padding: 20px; }
+        h1 { color: #333; margin-bottom: 5px; }
+        #canvas { border: 2px solid #555; background: #fff; cursor: crosshair; box-shadow: 0 0 15px rgba(0,0,0,0.1); border-radius: 4px; }
+        
         .hidden { display: none !important; }
-        .toolbar { margin-bottom: 10px; display: flex; justify-content: center; gap: 10px; }
-        .btn { padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
-        .active-tool { background: #2196F3; color: white; }
-        .box-container { margin: 20px auto; display: flex; justify-content: center; flex-wrap: wrap; }
-        .letter-input { width: 40px; height: 50px; font-size: 26px; text-align: center; margin: 5px; border: 2px solid #ccc; border-radius: 5px; text-transform: uppercase; }
-        .space { width: 30px; }
-        #congrats-area { margin: 20px; display: none; }
-        #congrats-text { font-size: 28px; color: #2ecc71; font-weight: bold; }
-        #movie-reveal { font-size: 24px; color: #333; margin: 10px; font-weight: bold; }
-        .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 10px 25px; cursor: pointer; border-radius: 5px; }
+        
+        /* Status and Welcome Text */
+        #player-welcome { color: #666; font-size: 14px; margin-bottom: 20px; }
+        #status-bar { font-size: 22px; color: #555; margin: 15px; font-weight: bold; min-height: 30px; }
+
+        /* Setup Area */
+        #setup-area { background: white; padding: 20px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #movieInput { padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 4px; width: 250px; }
+
+        /* Game Elements */
+        .toolbar { margin-bottom: 15px; display: flex; justify-content: center; gap: 10px; }
+        .btn { padding: 10px 20px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-weight: bold; transition: 0.2s; }
+        .active-tool { background: #2196F3; color: white; border-color: #2196F3; }
+        .btn:hover:not(.active-tool) { background: #f0f0f0; }
+
+        .box-container { margin: 25px auto; display: flex; justify-content: center; flex-wrap: wrap; max-width: 900px; }
+        .letter-input { 
+            width: 45px; height: 55px; font-size: 28px; text-align: center; 
+            margin: 5px; border: 2px solid #bbb; border-radius: 6px; 
+            text-transform: uppercase; font-weight: bold; outline: none;
+        }
+        .letter-input:focus { border-color: #2196F3; }
+        .letter-input:disabled { background-color: #eee; cursor: not-allowed; border-color: #ddd; }
+        .space { width: 35px; }
+
+        /* Victory / Reveal Area */
+        #congrats-area { margin: 20px; padding: 20px; background: #e8f5e9; border-radius: 10px; display: none; }
+        #congrats-text { font-size: 30px; color: #2ecc71; font-weight: bold; margin-bottom: 10px; }
+        #movie-reveal { font-size: 24px; color: #333; font-weight: bold; margin-bottom: 15px; }
+        .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 12px 30px; cursor: pointer; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-restart:hover { background: #45a049; transform: translateY(-2px); }
     </style>
 </head>
 <body>
     <h1>🎬 Movie Guessing Game</h1>
-    <p id="player-welcome"></p>
+    <p id="player-welcome">Connecting...</p>
     
+    <div id="status-bar">
+        <span id="drawer-status">Connecting to server...</span>
+    </div>
+
     <div id="setup-area">
-        <h3 id="role-display">Joining...</h3>
+        <h3 id="role-display">Determining Role...</h3>
         <div id="drawer-input" class="hidden">
             <input type="text" id="movieInput" placeholder="Enter movie title...">
-            <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
+            <button class="btn active-tool" onclick="sendMovie()">Start Round</button>
         </div>
     </div>
 
@@ -34,7 +61,7 @@
         <div id="congrats-area">
             <div id="congrats-text"></div>
             <div id="movie-reveal" class="hidden">The movie was: <span id="revealed-name" style="color: #ff4757;"></span></div>
-            <button class="btn-restart" onclick="requestRestart()">Play Again (New Roles)</button>
+            <button class="btn-restart" onclick="requestRestart()">Next Round</button>
         </div>
 
         <div id="movie-display" class="box-container"></div>
@@ -42,18 +69,22 @@
         <div id="controls" class="toolbar hidden">
             <button id="drawBtn" class="btn active-tool" onclick="setTool('draw')">✏️ Pencil</button>
             <button id="eraseBtn" class="btn" onclick="setTool('erase')">🧽 Eraser</button>
-            <button class="btn" onclick="clearCanvasSync()">🗑️ Clear</button>
+            <button class="btn" onclick="clearCanvasSync()">🗑️ Clear Canvas</button>
         </div>
-        <canvas id="canvas" width="800" height="450"></canvas>
+
+        <canvas id="canvas" width="850" height="500"></canvas>
     </div>
 
     <script>
+        // Extract player name from the URL
         const urlParams = new URLSearchParams(window.location.search);
         const myName = urlParams.get('name') || "Anonymous";
         document.getElementById('player-welcome').innerText = "Playing as: " + myName;
 
+        // Establish WebSocket connection with Name in the path
         let protocol = location.protocol === "https:" ? "wss" : "ws";
-        let ws = new WebSocket(`${protocol}://${location.host}/ws`);
+        let ws = new WebSocket(`${protocol}://${location.host}/ws/${encodeURIComponent(myName)}`);
+        
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
@@ -61,8 +92,9 @@
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             
+            // Redirect everyone if the drawer leaves
             if (data.type === "drawer_disconnected") {
-                alert("The Drawer has left the game. Redirecting...");
+                alert("The Drawer has left the game. Redirecting to home...");
                 window.location.href = "/";
                 return;
             }
@@ -73,8 +105,9 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
-                document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
+                document.getElementById('role-display').innerText = "Your Role: " + myRole.toUpperCase();
                 
+                // Show/Hide drawing tools based on role
                 if (myRole === "drawer") {
                     document.getElementById('drawer-input').classList.remove('hidden');
                     document.getElementById('controls').classList.remove('hidden');
@@ -83,6 +116,8 @@
                     document.getElementById('controls').classList.add('hidden');
                 }
 
+                updateDrawerStatus(data.drawer_name);
+
                 if (data.movie_set) setupGameUI(data.display, data.full_movie);
                 else {
                     document.getElementById('setup-area').classList.remove('hidden');
@@ -90,16 +125,22 @@
                 }
             }
             
-            if (data.type === "game_start") setupGameUI(data.display, data.full_movie);
+            if (data.type === "game_start") {
+                updateDrawerStatus(data.drawer_name);
+                setupGameUI(data.display, data.full_movie);
+            }
 
             if (data.type === "announcement") {
-                // Stabilize the winner name and reveal the movie to everyone
+                // Show stable winner name and reveal movie to everyone
                 document.getElementById('congrats-text').innerText = data.message;
                 document.getElementById('congrats-area').style.display = "block";
+                
                 if (data.reveal) {
                     document.getElementById('movie-reveal').classList.remove('hidden');
                     document.getElementById('revealed-name').innerText = data.reveal;
                 }
+                
+                // Lock inputs so no more guessing can happen this round
                 document.querySelectorAll('.letter-input').forEach(i => i.disabled = true);
             }
 
@@ -111,6 +152,21 @@
             if (data.type === "clear") ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
 
+        function updateDrawerStatus(name) {
+            const statusEl = document.getElementById('drawer-status');
+            if (!name) {
+                statusEl.innerText = "Waiting for players...";
+                return;
+            }
+            if (name === myName) {
+                statusEl.innerText = "✏️ You are the Drawer!";
+                statusEl.style.color = "#2196F3";
+            } else {
+                statusEl.innerText = `🎨 ${name} is drawing...`;
+                statusEl.style.color = "#555";
+            }
+        }
+
         function setupGameUI(display, full) {
             targetMovie = full;
             document.getElementById('setup-area').classList.add('hidden');
@@ -119,8 +175,9 @@
         }
 
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
+        
         function sendMovie() {
-            let val = document.getElementById('movieInput').value;
+            let val = document.getElementById('movieInput').value.trim();
             if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
         }
 
@@ -135,8 +192,10 @@
                     input.className = "letter-input";
                     input.maxLength = 1;
                     input.dataset.index = index;
-                    if (char !== "_") { input.value = char; input.disabled = true; } 
-                    else {
+                    if (char !== "_") { 
+                        input.value = char; 
+                        input.disabled = true; 
+                    } else {
                         if (myRole === "drawer") input.disabled = true;
                         input.oninput = () => checkFullWord();
                     }
@@ -146,17 +205,19 @@
         }
 
         function checkFullWord() {
-            // Check if someone else already won to prevent overwriting
+            // Prevent duplicate win messages if round is already over
             if (document.getElementById('congrats-area').style.display === "block") return;
 
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
             inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
+            
             if (guessArr.join("") === targetMovie) {
                 ws.send(JSON.stringify({type: "won", name: myName}));
             }
         }
 
+        // --- DRAWING LOGIC ---
         canvas.onmousedown = (e) => { 
             if(myRole === "drawer") { 
                 drawing = true; ctx.beginPath(); 
@@ -174,18 +235,24 @@
             draw(x, y, currentTool);
             ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: false }));
         };
+        
         function draw(x, y, tool) {
-            ctx.lineWidth = (tool === 'erase') ? 20 : 3;
+            ctx.lineWidth = (tool === 'erase') ? 25 : 4;
             ctx.lineCap = "round";
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : "#333333";
             ctx.lineTo(x, y); ctx.stroke(); ctx.moveTo(x, y);
         }
+
         function setTool(t) {
             currentTool = t;
             document.getElementById('drawBtn').classList.toggle('active-tool', t === 'draw');
             document.getElementById('eraseBtn').classList.toggle('active-tool', t === 'erase');
         }
-        function clearCanvasSync() { ctx.clearRect(0, 0, canvas.width, canvas.height); ws.send(JSON.stringify({type: "clear"})); }
+
+        function clearCanvasSync() { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            ws.send(JSON.stringify({type: "clear"})); 
+        }
     </script>
 </body>
 </html>
