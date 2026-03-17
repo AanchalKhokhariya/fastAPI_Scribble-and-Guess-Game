@@ -81,7 +81,6 @@
 
                 updateDrawerStatus(data.drawer_name);
 
-                // REDRAW HISTORY on refresh
                 if (data.history) {
                     data.history.forEach(step => {
                         if (step.isNewPath) ctx.beginPath();
@@ -89,10 +88,7 @@
                     });
                 }
 
-                // Restore winner message on refresh
-                if (data.winner_msg) {
-                    showAnnouncement(data.winner_msg, data.revealed);
-                }
+                if (data.winner_msg) showAnnouncement(data.winner_msg, data.revealed);
 
                 if (data.movie_set) setupGameUI(data.display, data.full_movie);
                 else {
@@ -106,9 +102,7 @@
                 setupGameUI(data.display, data.full_movie);
             }
 
-            if (data.type === "announcement") {
-                showAnnouncement(data.message, data.reveal);
-            }
+            if (data.type === "announcement") showAnnouncement(data.message, data.reveal);
 
             if (data.type === "drawing" && myRole === "guesser") {
                 if (data.isNewPath) ctx.beginPath();
@@ -131,7 +125,7 @@
         function updateDrawerStatus(name) {
             const statusEl = document.getElementById('drawer-status');
             if (!name) return;
-            statusEl.innerText = (name === myName) ? "✏️ You are the Drawer!" : `🎨 ${name} is drawing...`;
+            statusEl.innerText = (name === myName) ? "✏️ You are drawing!" : `🎨 ${name} is drawing...`;
             statusEl.style.color = (name === myName) ? "#2196F3" : "#555";
         }
 
