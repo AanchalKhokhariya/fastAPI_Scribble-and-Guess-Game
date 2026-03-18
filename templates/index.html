@@ -16,6 +16,9 @@
         #congrats-text { font-size: 30px; color: #2ecc71; font-weight: bold; }
         #movie-reveal { font-size: 24px; color: #333; font-weight: bold; margin-bottom: 15px; }
         #status-bar { font-size: 22px; color: #555; margin: 15px; font-weight: bold; }
+        #timer-display { font-size: 24px; color: #ff4757; font-weight: bold; margin: 10px; }
+        .timer-low { color: #eb4d4b !important; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 12px 30px; cursor: pointer; border-radius: 50px; }
         #colorPicker { width: 50px; height: 40px; border: none; cursor: pointer; padding: 0; }
     </style>
@@ -24,6 +27,8 @@
     <h1>🎬 Movie Guessing Game</h1>
     <p id="player-welcome">Connecting...</p>
     <div id="status-bar"><span id="drawer-status">Connecting...</span></div>
+    
+    <div id="timer-display" class="hidden">Time Left: <span id="time-left">05:00</span></div>
 
     <div id="setup-area">
         <h3 id="role-display">Determining Role...</h3>
@@ -60,10 +65,10 @@
         let ws = new WebSocket(`${protocol}://${location.host}/ws/${encodeURIComponent(myName)}`);
         let canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
-
+        let countdownInterval = null;
+        let timeLeft = 300; 
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
-            
             if (data.type === "drawer_disconnected") {
                 alert("The Drawer has left the game. Redirecting...");
                 window.location.href = "/";
@@ -73,14 +78,11 @@
             if (data.type === "init") {
                 myRole = data.role; 
                 targetMovie = "";
-
+                stopTimer(); 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // ✅ FIX: Reset previous round UI
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('revealed-name').innerText = "";
-
                 document.getElementById('role-display').innerText = "Your Role: " + myRole.toUpperCase();
                 
                 if (myRole === "drawer") {
@@ -101,7 +103,6 @@
                 }
 
                 if (data.winner_msg) showAnnouncement(data.winner_msg, data.revealed);
-
                 if (data.movie_set) setupGameUI(data.display, data.full_movie);
                 else {
                     document.getElementById('setup-area').classList.remove('hidden');
@@ -110,24 +111,59 @@
             }
             
             if (data.type === "game_start") {
-                // ✅ Reset UI again for safety
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('revealed-name').innerText = "";
-
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
+                startTimer(300); 
             }
 
-            if (data.type === "announcement") showAnnouncement(data.message, data.reveal);
+            if (data.type === "announcement") {
+                stopTimer(); 
+                showAnnouncement(data.message, data.reveal);
+            }
 
             if (data.type === "drawing" && myRole === "guesser") {
                 if (data.isNewPath) ctx.beginPath();
                 draw(data.x, data.y, data.tool, data.color);
             }
-
             if (data.type === "clear") ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
+
+        function startTimer(seconds) {
+            stopTimer();
+            timeLeft = seconds;
+            document.getElementById('timer-display').classList.remove('hidden');
+            updateTimerDisplay();
+            countdownInterval = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    stopTimer();
+                }
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            document.getElementById('timer-display').classList.add('hidden');
+            document.getElementById('time-left').classList.remove('timer-low');
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const timerSpan = document.getElementById('time-left');
+            timerSpan.innerText = display;
+            if (timeLeft <= 30) {
+                timerSpan.classList.add('timer-low');
+            }
+        }
 
         function showAnnouncement(msg, reveal) {
             document.getElementById('congrats-text').innerText = msg;
@@ -154,7 +190,6 @@
         }
 
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
-
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
             if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
@@ -163,7 +198,6 @@
         function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display'); 
             container.innerHTML = "";
-
             displayStr.split("").forEach((char, index) => {
                 if (char === " ") {
                     let div = document.createElement('div'); 
@@ -174,7 +208,6 @@
                     input.className = "letter-input"; 
                     input.maxLength = 1; 
                     input.dataset.index = index;
-
                     if (char !== "_") { 
                         input.value = char; 
                         input.disabled = true; 
@@ -183,23 +216,18 @@
                         input.oninput = (e) => {
                             let val = e.target.value.toUpperCase();
                             e.target.value = val;
-
                             if (!val) return;
-
                             let inputs = Array.from(document.querySelectorAll('.letter-input'));
                             let currentIndex = inputs.indexOf(e.target);
-
                             for (let i = currentIndex + 1; i < inputs.length; i++) {
                                 if (!inputs[i].disabled && inputs[i].value === "") {
                                     inputs[i].focus();
                                     break;
                                 }
                             }
-
                             checkFullWord();
                         };
                     }
-
                     container.appendChild(input);
                 }
             });
@@ -207,14 +235,11 @@
 
         function checkFullWord() {
             if (document.getElementById('congrats-area').style.display === "block") return;
-
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
-
             inputs.forEach(input => { 
                 guessArr[input.dataset.index] = input.value.toUpperCase(); 
             });
-
             if (guessArr.join("") === targetMovie) {
                 ws.send(JSON.stringify({type: "won", name: myName}));
             }
@@ -227,21 +252,16 @@
                 let rect = canvas.getBoundingClientRect();
                 let x = e.clientX - rect.left, y = e.clientY - rect.top;
                 let color = document.getElementById('colorPicker').value;
-
                 ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: true, color: color }));
                 draw(x, y, currentTool, color);
             } 
         };
-
         canvas.onmouseup = () => { drawing = false; };
-
         canvas.onmousemove = (e) => {
             if (!drawing || myRole !== "drawer") return;
-
             let rect = canvas.getBoundingClientRect();
             let x = e.clientX - rect.left, y = e.clientY - rect.top;
             let color = document.getElementById('colorPicker').value;
-
             draw(x, y, currentTool, color);
             ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: false, color: color }));
         };
