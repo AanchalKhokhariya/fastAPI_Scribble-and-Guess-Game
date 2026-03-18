@@ -7,6 +7,7 @@ from typing import List, Dict
 
 app = FastAPI()
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,6 +17,42 @@ app.add_middleware(
 )
 
 templates = Jinja2Templates(directory="templates")
+
+
+def get_random_movie():
+    movie = random.choice(MOVIE_POOL)
+    print(f"🎲 Random movie selected: {movie}")
+    return movie
+
+import pandas as pd
+
+def load_movies_after_2000():
+    print("🔄 Loading movies from CSV...")
+
+    try:
+        df = pd.read_csv("IMDB_5000_Movie_Dataset_1547_45.csv")
+
+        print(f"📦 Total rows in CSV: {len(df)}")
+
+        # Filter after 2000
+        df = df[df['title_year'] >= 2000]
+
+        print(f"🎯 Movies after 2000: {len(df)}")
+
+        # Only take movie_title column
+        movies = df['movie_title'].dropna().tolist()
+
+        # Clean names
+        movies = [m.strip().upper() for m in movies]
+
+        print(f"✅ Final movie list ready: {len(movies)}")
+
+        return movies if movies else ["INCEPTION"]
+
+    except Exception as e:
+        print(f"🔥 ERROR loading CSV: {e}")
+        return ["INCEPTION"]
+MOVIE_POOL = load_movies_after_2000()
 
 class ConnectionManager:
     def __init__(self):
@@ -222,6 +259,24 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                 manager.draw_history = []
                 await manager.broadcast(data)
 
+            elif data["type"] == "random_movie":
+                if id(websocket) == manager.game_state["drawer_id"]:
+                    movie = get_random_movie()
+                    manager.game_state["movie"] = movie
+                    manager.game_state["display_name"] = process_movie(movie)
+                    manager.game_state["is_round_active"] = True
+
+                    await manager.start_round_timer()
+
+                    await manager.broadcast({
+                        "type": "game_start",
+                        "display": manager.game_state["display_name"],
+                        "full_movie": manager.game_state["movie"],
+                        "drawer_name": manager.player_names[manager.game_state["drawer_id"]]
+                    })
+
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
             await manager.broadcast({"type": "drawer_disconnected"})
+
+# here can you make filter of movies after 2000 like filter the way that imdb searching movie do not load more

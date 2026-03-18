@@ -50,9 +50,14 @@
             <div id="setup-area">
                 <h3 id="role-display">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
-                    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
-                    <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
-                </div>
+    <input type="text" id="movieInput" placeholder="Enter movie title..." 
+           style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
+
+        <div style="margin-top: 10px;">
+                <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
+                <button class="btn" onclick="generateMovie()">🎲 Random Movie</button>
+            </div>
+        </div>
             </div>
             <div id="game-area" class="hidden">
                 <div id="congrats-area">
@@ -269,6 +274,9 @@
         function clearCanvasSync() { 
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             ws.send(JSON.stringify({type: "clear"})); 
+        }
+        function generateMovie() {
+            ws.send(JSON.stringify({ type: "random_movie" }));
         }
     </script>
 </body>
