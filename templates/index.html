@@ -220,6 +220,24 @@
                         input.value = char; input.disabled = true; 
                     } else {
                         if (myRole === "drawer") input.disabled = true;
+                        input.onkeydown = (e) => {
+                            if (e.key === " ") {
+                                e.preventDefault();
+                                return;
+                            }
+                            let inputs = Array.from(document.querySelectorAll('.letter-input'));
+                            let currentIndex = inputs.indexOf(e.target);
+                            if (e.key === "Backspace") {
+                                if (e.target.value === "") {
+                                    for (let i = currentIndex - 1; i >= 0; i--) {
+                                        if (!inputs[i].disabled) {
+                                            inputs[i].focus();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        };
                         input.oninput = (e) => {
                             let val = e.target.value.toUpperCase();
                             e.target.value = val;
@@ -227,7 +245,10 @@
                             let inputs = Array.from(document.querySelectorAll('.letter-input'));
                             let currentIndex = inputs.indexOf(e.target);
                             for (let i = currentIndex + 1; i < inputs.length; i++) {
-                                if (!inputs[i].disabled && inputs[i].value === "") { inputs[i].focus(); break; }
+                                if (!inputs[i].disabled && inputs[i].value === "") {
+                                    inputs[i].focus();
+                                    break;
+                                }
                             }
                             checkFullWord();
                         };
