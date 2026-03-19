@@ -21,36 +21,25 @@ templates = Jinja2Templates(directory="templates")
 
 def get_random_movie():
     movie = random.choice(MOVIE_POOL)
-    print(f"🎲 Random movie selected: {movie}")
     return movie
 
 import pandas as pd
 
 def load_movies_after_2000():
-    print("🔄 Loading movies from CSV...")
 
     try:
         df = pd.read_csv("IMDB_5000_Movie_Dataset_1547_45.csv")
 
-        print(f"📦 Total rows in CSV: {len(df)}")
-
-        # Filter after 2000
         df = df[df['title_year'] >= 2000]
 
-        print(f"🎯 Movies after 2000: {len(df)}")
-
-        # Only take movie_title column
         movies = df['movie_title'].dropna().tolist()
 
-        # Clean names
         movies = [m.strip().upper() for m in movies]
 
-        print(f"✅ Final movie list ready: {len(movies)}")
 
         return movies if movies else ["INCEPTION"]
 
     except Exception as e:
-        print(f"🔥 ERROR loading CSV: {e}")
         return ["INCEPTION"]
 MOVIE_POOL = load_movies_after_2000()
 
@@ -278,5 +267,3 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
             await manager.broadcast({"type": "drawer_disconnected"})
-
-# here can you make filter of movies after 2000 like filter the way that imdb searching movie do not load more

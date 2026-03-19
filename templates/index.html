@@ -12,7 +12,6 @@
         .player-name { font-weight: bold; color: #333; }
         .player-score { background: #ff4757; color: white; padding: 2px 8px; border-radius: 12px; font-size: 14px; min-width: 30px; text-align: center; }
         .is-me { border-left-color: #2196F3; background: #e3f2fd; }
-
         #content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; }
         #canvas { border: 3px solid #333; background: #fff; cursor: crosshair; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
         .hidden { display: none !important; }
@@ -41,8 +40,7 @@
     <div class="main-container">
         <div id="sidebar">
             <div class="sidebar-title">Leaderboard</div>
-            <div id="player-list">
-                </div>
+            <div id="player-list"></div>
         </div>
         <div id="content">
             <div id="status-bar"><span id="drawer-status">Waiting for game...</span></div>
@@ -50,13 +48,12 @@
             <div id="setup-area">
                 <h3 id="role-display">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
-    <input type="text" id="movieInput" placeholder="Enter movie title..." 
-           style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
+    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
 
         <div style="margin-top: 10px;">
-                <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
-                <button class="btn" onclick="generateMovie()">🎲 Random Movie</button>
-            </div>
+            <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
+            <button class="btn" onclick="generateMovie()">🎲 Random Movie</button>
+        </div>
         </div>
             </div>
             <div id="game-area" class="hidden">
@@ -65,6 +62,7 @@
                     <div id="movie-reveal" class="hidden">The movie was: <span id="revealed-name" style="color: #ff4757;"></span></div>
                     <button class="btn-restart" onclick="requestRestart()">Next Round</button>
                 </div>
+                <h2 id="drawer-movie" style="color:#2196F3;"></h2>
                 <div id="movie-display" class="box-container"></div>
                 <div id="controls" class="toolbar hidden">
                     <button id="drawBtn" class="btn active-tool" onclick="setTool('draw')">✏️ Pencil</button>
@@ -103,7 +101,6 @@
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
-                
                 if (myRole === "drawer") {
                     document.getElementById('drawer-input').classList.remove('hidden');
                     document.getElementById('controls').classList.remove('hidden');
@@ -196,6 +193,11 @@
         }
         function setupGameUI(display, full) {
             targetMovie = full;
+            if (myRole === "drawer") {
+                document.getElementById("drawer-movie").innerText = "Your Movie: " + full;
+            } else {
+                document.getElementById("drawer-movie").innerText = "";
+            }
             document.getElementById('setup-area').classList.add('hidden');
             document.getElementById('game-area').classList.remove('hidden');
             createGuessingBoxes(display);
@@ -205,7 +207,6 @@
             let val = document.getElementById('movieInput').value.trim();
             if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
         }
-
         function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display'); 
             container.innerHTML = "";
