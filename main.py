@@ -1,16 +1,14 @@
 import random
 import asyncio
-import json
+import time
 import pandas as pd
+import fakeredis
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
 
 app = FastAPI()
-
-import fakeredis
-
 
 r = fakeredis.FakeRedis(decode_responses=True)
 
@@ -41,9 +39,7 @@ def get_random_movie():
 
 class ConnectionManager:
     def __init__(self):
-       
         self.active_connections: Dict[str, WebSocket] = {}
-        
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
         self.round_timer_task = None  
@@ -59,29 +55,32 @@ class ConnectionManager:
         }
 
     def get_player_score(self, name: str):
-        
         score = r.get(f"score:{name}")
         return int(score) if score else 0
 
     def set_player_score(self, name: str, points: int):
-        
         current_score = self.get_player_score(name)
         new_score = current_score + points
         r.set(f"score:{name}", new_score)
 
+    def get_remaining_time(self):
+        """Calculates remaining seconds based on the end_time stored in Redis"""
+        end_time = r.get("round_end_time")
+        if end_time:
+            remaining = int(float(end_time) - time.time())
+            return max(0, remaining)
+        return 0
+
     def get_player_data(self):
-        """Returns name and scores from Redis for all currently active players"""
-        return [{"name": name, "score": self.get_player_score(name)} 
-                for name in self.active_connections.keys()]
+        players = [{"name": name, "score": self.get_player_score(name)} 
+                   for name in self.active_connections.keys()]
+        return sorted(players, key=lambda x: x['score'], reverse=True)
 
     async def connect(self, websocket: WebSocket, name: str):
         await websocket.accept()
         ws_id = id(websocket)
-        
-        
         self.active_connections[name] = websocket
         self.ws_to_name[ws_id] = name
-        
         
         if r.get(f"score:{name}") is None:
             r.set(f"score:{name}", 0)
@@ -98,35 +97,36 @@ class ConnectionManager:
     async def disconnect(self, websocket: WebSocket):
         ws_id = id(websocket)
         name = self.ws_to_name.get(ws_id)
-        
         if name:
             if name in self.active_connections:
                 del self.active_connections[name]
             del self.ws_to_name[ws_id]
-            
             is_drawer = (name == self.game_state["drawer_name"])
-            
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
-
             if is_drawer:
                 if self.round_timer_task:
                     self.round_timer_task.cancel()
                 self.game_state["drawer_assigned"] = False
                 self.game_state["drawer_name"] = None
+                r.delete("round_end_time")
                 return True
         return False
 
-    async def start_round_timer(self):
+    async def start_round_timer(self, duration=300):
         if self.round_timer_task:
             self.round_timer_task.cancel()
+        
+        end_timestamp = time.time() + duration
+        r.set("round_end_time", end_timestamp)
 
         async def timer():
             try:
-                await asyncio.sleep(300)  
+                await asyncio.sleep(duration)  
                 if self.game_state["is_round_active"]:
                     self.game_state["is_round_active"] = False
-                    self.game_state["winner_announcement"] = "⏰ Time's up! No one guessed the movie."
+                    self.game_state["winner_announcement"] = "⏰ Time's up! No one guessed."
                     self.game_state["revealed_movie"] = self.game_state["movie"]
+                    r.delete("round_end_time")
                     await self.broadcast({
                         "type": "announcement",
                         "message": self.game_state["winner_announcement"],
@@ -142,22 +142,21 @@ class ConnectionManager:
         if self.round_timer_task:
             self.round_timer_task.cancel()
             self.round_timer_task = None
-
+        
+        r.delete("round_end_time")
         self.game_state.update({
             "movie": "", "display_name": "", "is_round_active": False,
             "winner_announcement": None, "revealed_movie": None
         })
         self.draw_history = []
-
         if not self.active_connections:
             return
-
+        
         old_drawer_name = self.game_state["drawer_name"]
         names = list(self.active_connections.keys())
-
         if len(names) > 1 and old_drawer_name in names:
             names.remove(old_drawer_name)
-
+        
         new_drawer_name = random.choice(names)
         self.game_state["drawer_name"] = new_drawer_name
         self.game_state["drawer_assigned"] = True
@@ -181,8 +180,8 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 def process_movie(movie: str):
-    vowels = "AEIOUaeiou"
-    return "".join([char if (char in vowels or char == " ") else "_" for char in movie])
+    vowels = "AEIOUaeiou "
+    return "".join([char if (char in vowels) else "_" for char in movie])
 
 @app.get("/")
 async def get(request: Request):
@@ -196,18 +195,16 @@ async def get_game(request: Request):
 async def websocket_endpoint(websocket: WebSocket, name: str):
     role = await manager.connect(websocket, name)
     
-    await websocket.send_json({
-        "type": "init",
-        "role": role,
-        "movie_set": bool(manager.game_state["movie"]),
-        "display": manager.game_state["display_name"],
-        "full_movie": manager.game_state["movie"],
-        "drawer_name": manager.game_state["drawer_name"],
-        "history": manager.draw_history,
-        "winner_msg": manager.game_state["winner_announcement"],
-        "revealed": manager.game_state["revealed_movie"]
-    })
+    current_time_left = manager.get_remaining_time()
 
+    await websocket.send_json({
+        "type": "init", "role": role, "movie_set": bool(manager.game_state["movie"]),
+        "display": manager.game_state["display_name"], "full_movie": manager.game_state["movie"],
+        "drawer_name": manager.game_state["drawer_name"], "history": manager.draw_history,
+        "winner_msg": manager.game_state["winner_announcement"], "revealed": manager.game_state["revealed_movie"],
+        "time_left": current_time_left 
+    })
+    
     try:
         while True:
             data = await websocket.receive_json()
@@ -215,37 +212,26 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["display_name"] = process_movie(manager.game_state["movie"])
                 manager.game_state["is_round_active"] = True
-                await manager.start_round_timer()
+                await manager.start_round_timer(300)
                 await manager.broadcast({
-                    "type": "game_start",
-                    "display": manager.game_state["display_name"],
-                    "full_movie": manager.game_state["movie"],
-                    "drawer_name": manager.game_state["drawer_name"]
+                    "type": "game_start", "display": manager.game_state["display_name"],
+                    "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
+                    "time_left": 300
                 })
-
             elif data["type"] == "won" and manager.game_state["is_round_active"]:
                 manager.game_state["is_round_active"] = False
                 if manager.round_timer_task:
                     manager.round_timer_task.cancel()
-                
-                winner_name = name
-                drawer_name = manager.game_state["drawer_name"]
-                
-                
-                manager.set_player_score(winner_name, 50)
-                if drawer_name:
-                    manager.set_player_score(drawer_name, 25)
-                
-                manager.game_state["winner_announcement"] = f"🎉 {winner_name} guessed it first!"
+                r.delete("round_end_time")
+                manager.set_player_score(name, 50)
+                if manager.game_state["drawer_name"]:
+                    manager.set_player_score(manager.game_state["drawer_name"], 25)
+                manager.game_state["winner_announcement"] = f"🎉 {name} guessed it first!"
                 manager.game_state["revealed_movie"] = manager.game_state["movie"]
-                
                 await manager.broadcast({"type": "player_list", "players": manager.get_player_data()})
                 await manager.broadcast({
-                    "type": "announcement",
-                    "message": manager.game_state["winner_announcement"],
-                    "reveal": manager.game_state["revealed_movie"]
+                    "type": "announcement", "message": manager.game_state["winner_announcement"], "reveal": manager.game_state["revealed_movie"]
                 })
-
             elif data["type"] == "restart":
                 await manager.restart_game()
             elif data["type"] == "drawing":
@@ -260,14 +246,12 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                     manager.game_state["movie"] = movie
                     manager.game_state["display_name"] = process_movie(movie)
                     manager.game_state["is_round_active"] = True
-                    await manager.start_round_timer()
+                    await manager.start_round_timer(300)
                     await manager.broadcast({
-                        "type": "game_start",
-                        "display": manager.game_state["display_name"],
-                        "full_movie": manager.game_state["movie"],
-                        "drawer_name": manager.game_state["drawer_name"]
+                        "type": "game_start", "display": manager.game_state["display_name"],
+                        "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
+                        "time_left": 300
                     })
-
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
             await manager.broadcast({"type": "drawer_disconnected"})

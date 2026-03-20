@@ -48,13 +48,12 @@
             <div id="setup-area">
                 <h3 id="role-display">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
-    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
-
-        <div style="margin-top: 10px;">
-            <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
-            <button class="btn" onclick="generateMovie()">🎲 Random Movie</button>
-        </div>
-        </div>
+                    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 10px; width: 250px; border-radius: 5px; border: 1px solid #ddd;">
+                    <div style="margin-top: 10px;">
+                        <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
+                        <button class="btn" onclick="generateMovie()">🎲 Random Movie</button>
+                    </div>
+                </div>
             </div>
             <div id="game-area" class="hidden">
                 <div id="congrats-area">
@@ -83,7 +82,8 @@
         let canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
         let countdownInterval = null;
-        let timeLeft = 300; 
+        let timeLeft = 0; 
+
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             if (data.type === "player_list") {
@@ -115,6 +115,12 @@
                         draw(step.x, step.y, step.tool, step.color);
                     });
                 }
+                
+                // RESTORE TIMER ON REFRESH
+                if (data.time_left > 0 && data.movie_set) {
+                    startTimer(data.time_left);
+                }
+
                 if (data.winner_msg) showAnnouncement(data.winner_msg, data.revealed);
                 if (data.movie_set) setupGameUI(data.display, data.full_movie);
                 else {
@@ -127,7 +133,7 @@
                 document.getElementById('movie-reveal').classList.add('hidden');
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
-                startTimer(300);
+                startTimer(data.time_left || 300);
             }
             if (data.type === "announcement") {
                 stopTimer();
@@ -145,10 +151,7 @@
             players.forEach(p => {
                 const div = document.createElement('div');
                 div.className = "player-item" + (p.name === myName ? " is-me" : "");
-                div.innerHTML = `
-                    <span class="player-name">${p.name}</span>
-                    <span class="player-score">${p.score} pts</span>
-                `;
+                div.innerHTML = `<span class="player-name">${p.name}</span><span class="player-score">${p.score} pts</span>`;
                 listContainer.appendChild(div);
             });
         }
@@ -159,14 +162,18 @@
             updateTimerDisplay();
             countdownInterval = setInterval(() => {
                 timeLeft--;
-                if (timeLeft <= 0) stopTimer();
+                if (timeLeft <= 0) {
+                    stopTimer();
+                }
                 updateTimerDisplay();
             }, 1000);
         }
+
         function stopTimer() {
             if (countdownInterval) clearInterval(countdownInterval);
             document.getElementById('timer-display').classList.add('hidden');
         }
+
         function updateTimerDisplay() {
             const mins = Math.floor(timeLeft / 60);
             const secs = timeLeft % 60;
