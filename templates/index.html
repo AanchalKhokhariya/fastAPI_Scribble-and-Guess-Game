@@ -37,6 +37,11 @@
         <h1>🎬 Movie Guessing Game</h1>
         <p id="player-welcome" style="margin: 5px 0; color: #888; font-weight: bold;">Connecting...</p>
     </header>
+    <div id="disconnect-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); color: white; z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <h1 style="font-size: 50px;">🚫 Game Closed</h1>
+        <p style="font-size: 20px;">The server has been closed or the connection was lost.</p>
+        <button class="btn" onclick="location.reload()" style="margin-top: 20px; background: #ff4757; color: white; border: none;">Try Reconnecting</button>
+    </div>
     <div class="main-container">
         <div id="sidebar">
             <div class="sidebar-title">Leaderboard</div>
@@ -307,6 +312,16 @@
         function generateMovie() {
             ws.send(JSON.stringify({ type: "random_movie" }));
         }
+
+        ws.onclose = () => {
+            console.log("WebSocket connection closed.");
+            stopTimer();
+            document.getElementById('disconnect-overlay').classList.remove('hidden');
+            document.querySelectorAll('.letter-input').forEach(i => i.disabled = true);
+            const statusEl = document.getElementById('drawer-status');
+            statusEl.innerText = "🔌 Connection Lost";
+            statusEl.style.color = "red";
+        };
     </script>
 </body>
 </html>

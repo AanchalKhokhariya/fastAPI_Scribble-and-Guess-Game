@@ -21,7 +21,12 @@ app.add_middleware(
 )
 
 templates = Jinja2Templates(directory="templates")
-
+@app.on_event("shutdown")
+def shutdown_event():
+    """Clean up Redis when the server stops"""
+    print("Server shutting down... clearing session data.")
+    r.delete("round_end_time")
+    
 def load_movies_after_2000():
     try:
         df = pd.read_csv("IMDB_5000_Movie_Dataset_1547_45.csv")
