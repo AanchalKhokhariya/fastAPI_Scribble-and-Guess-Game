@@ -186,7 +186,8 @@ manager = ConnectionManager()
 
 def process_movie(movie: str):
     vowels = "AEIOUaeiou "
-    return "".join([char if (char in vowels) else "_" for char in movie])
+    return "".join([char if (char in vowels or not char.isalnum()) else "_" for char in movie])
+
 
 @app.get("/")
 async def get(request: Request):
