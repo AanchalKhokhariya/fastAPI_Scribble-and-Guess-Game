@@ -117,7 +117,7 @@ class ConnectionManager:
                 return True
         return False
 
-    async def start_round_timer(self, duration=300):
+    async def start_round_timer(self, duration=480):
         if self.round_timer_task:
             self.round_timer_task.cancel()
         
@@ -218,11 +218,11 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["display_name"] = process_movie(manager.game_state["movie"])
                 manager.game_state["is_round_active"] = True
-                await manager.start_round_timer(300)
+                await manager.start_round_timer(480)
                 await manager.broadcast({
                     "type": "game_start", "display": manager.game_state["display_name"],
                     "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
-                    "time_left": 300
+                    "time_left": 480
                 })
             elif data["type"] == "won" and manager.game_state["is_round_active"]:
                 manager.game_state["is_round_active"] = False
@@ -252,11 +252,11 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                     manager.game_state["movie"] = movie
                     manager.game_state["display_name"] = process_movie(movie)
                     manager.game_state["is_round_active"] = True
-                    await manager.start_round_timer(300)
+                    await manager.start_round_timer(480)
                     await manager.broadcast({
                         "type": "game_start", "display": manager.game_state["display_name"],
                         "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
-                        "time_left": 300
+                        "time_left": 480
                     })
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
