@@ -187,6 +187,7 @@
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             if (data.type === "player_list") {
+                window.lastPlayerData = data.players; 
                 updatePlayerList(data.players);
             }
             if (data.type === "movie_options") {
@@ -248,10 +249,15 @@
         function updatePlayerList(players) {
             const listContainer = document.getElementById('player-list');
             listContainer.innerHTML = "";
+            const drawerStatus = document.getElementById('drawer-status').dataset.drawerName;
             players.forEach(p => {
                 const div = document.createElement('div');
                 div.className = "player-item" + (p.name === myName ? " is-me" : "");
-                div.innerHTML = `<span class="player-name">${p.name}</span><span class="player-score">${p.score} pts</span>`;
+                const drawerIcon = (p.name === drawerStatus) ? " ✏️" : "";
+                div.innerHTML = `
+                    <span class="player-name">${p.name}${drawerIcon}</span>
+                    <span class="player-score">${p.score} pts</span>
+                `;
                 listContainer.appendChild(div);
             });
         }
@@ -293,8 +299,11 @@
         function updateDrawerStatus(name) {
             const statusEl = document.getElementById('drawer-status');
             if (!name) return;
-            statusEl.innerText = (name === myName) ? "✏️ YOU are the Drawer!" : `🎨 ${name} is drawing...`;
-            statusEl.style.color = (name === myName) ? "#3b82f6" : "#94a3b8";
+            statusEl.dataset.drawerName = name;
+            statusEl.innerText = ""; 
+            if (window.lastPlayerData) {
+                updatePlayerList(window.lastPlayerData);
+            }
         }
         function setupGameUI(display, full) {
             targetMovie = full;
