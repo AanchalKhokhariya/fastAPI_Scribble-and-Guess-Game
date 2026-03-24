@@ -11,58 +11,25 @@
             --text: #f8fafc;
         }
         body { 
-            margin: 0; 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
+            margin: 0; height: 100vh; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
             background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
-            color: var(--text);
+            font-family: 'Inter', system-ui, sans-serif; color: var(--text);
         }
         .login-card {
-            background: var(--card);
-            padding: 40px;
-            border-radius: 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: var(--card); padding: 40px; border-radius: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);
         }
-        h1 { font-size: 2rem; margin-bottom: 1.5rem; letter-spacing: -0.025em; }
         .name-input { 
-            padding: 16px 20px; 
-            font-size: 18px; 
-            border: 2px solid #334155; 
-            border-radius: 12px; 
-            margin-bottom: 24px; 
-            width: 280px; 
-            text-align: center; 
-            background: #0f172a;
-            color: white;
-            outline: none;
-            transition: border-color 0.2s;
+            padding: 16px 20px; font-size: 18px; border: 2px solid #334155; 
+            border-radius: 12px; margin-bottom: 24px; width: 280px; 
+            text-align: center; background: #0f172a; color: white; outline: none;
         }
-        .name-input:focus { border-color: var(--primary); }
         .start-btn { 
-            padding: 16px 48px; 
-            font-size: 20px; 
-            font-weight: bold;
-            color: white; 
-            background-color: var(--primary); 
-            border-radius: 12px; 
-            border: none; 
-            cursor: pointer; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            width: 100%;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .start-btn:hover { 
-            background-color: var(--primary-hover); 
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(255, 71, 87, 0.4);
+            padding: 16px 48px; font-size: 20px; font-weight: bold;
+            color: white; background-color: var(--primary); border-radius: 12px; 
+            border: none; cursor: pointer; width: 100%; text-transform: uppercase;
         }
     </style>
 </head>
@@ -74,12 +41,5 @@
             <button type="submit" class="start-btn">START GAME</button>
         </form>
     </div>
-    <script>
-        function startGame() {
-            const name = document.getElementById('playerName').value.trim();
-            if (!name) { alert("Please enter your name!"); return; }
-            window.location.href = `/game?name=${encodeURIComponent(name)}`;
-        }
-    </script>
 </body>
 </html>

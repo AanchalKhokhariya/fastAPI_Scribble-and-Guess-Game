@@ -22,6 +22,7 @@ app.add_middleware(
 )
 
 templates = Jinja2Templates(directory="templates")
+
 @app.on_event("shutdown")
 def shutdown_event():
     """Clean up Redis when the server stops"""
@@ -35,7 +36,7 @@ def load_movies_after_2000():
         movies = df['movie_title'].dropna().tolist()
         movies = [m.strip().upper() for m in movies]
         return movies if movies else ["INCEPTION"]
-    except Exception:
+    except Exception as e:
         return ["INCEPTION"]
 
 MOVIE_POOL = load_movies_after_2000()
@@ -188,27 +189,27 @@ def process_movie(movie: str):
     vowels = "AEIOUaeiou "
     return "".join([char if (char in vowels or not char.isalnum()) else "_" for char in movie])
 
-
 @app.get("/")
 async def get(request: Request):
     return templates.TemplateResponse("front_page.html", {"request": request})
 
 @app.post("/join")
 async def join_game(name: str = Form(...)):
-    """Receives name via POST and sets it in a cookie to prevent URL manipulation."""
     response = RedirectResponse(url="/game", status_code=303)
     response.set_cookie(key="player_name", value=name, httponly=True)
     return response
 
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("player_name")
+    return response
+
 @app.get("/game")
 async def get_game(request: Request, player_name: str = Cookie(None)):
-    """Reads the name from the cookie instead of the URL query string."""
     if not player_name:
         return RedirectResponse(url="/", status_code=303)
-    return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "player_name": player_name 
-    })
+    return templates.TemplateResponse("index.html", {"request": request, "player_name": player_name})
 
 @app.websocket("/ws/{name}")
 async def websocket_endpoint(websocket: WebSocket, name: str):
