@@ -36,9 +36,8 @@ def shutdown_event():
     
 def load_movies_after_2000():
     try:
-        df = pd.read_csv("IMDB_5000_Movie_Dataset_1547_45.csv")
-        df = df[df['title_year'] >= 2000]
-        movies = df['movie_title'].dropna().tolist()
+        df = pd.read_csv("Movie_Names_Dataset.csv")
+        movies = df['Movie Name'].dropna().tolist()
         movies = [m.strip().upper() for m in movies]
         return movies if movies else ["INCEPTION"]
     except Exception as e:
