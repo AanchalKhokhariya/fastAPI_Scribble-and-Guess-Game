@@ -162,11 +162,10 @@
         </div>
     </div>
     <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const myName = urlParams.get('name') || "Anonymous";
+        let myName = "You"; 
         document.getElementById('player-welcome').innerText = "PLAYER: " + myName;
         let protocol = window.location.protocol === "https:" ? "wss" : "ws";
-        let ws = new WebSocket(`${protocol}://${window.location.host}/ws/${encodeURIComponent(myName)}`);
+        let ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
         let canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
         let countdownInterval = null;

@@ -3,10 +3,11 @@ import asyncio
 import time
 import pandas as pd
 import fakeredis
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form, Cookie
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
+from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 
@@ -20,6 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.post("/join")
+async def join(name: str = Form(...)):
+    response = RedirectResponse(url="/game", status_code=303)
+    response.set_cookie(key="username", value=name)
+    return response
 templates = Jinja2Templates(directory="templates")
 @app.on_event("shutdown")
 def shutdown_event():
@@ -113,8 +120,6 @@ class ConnectionManager:
             is_drawer = (name == self.game_state["drawer_name"])
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
             if is_drawer:
-                # DO NOT reset game immediately
-                # Allow reconnect (refresh case)
                 print("Drawer disconnected, waiting for reconnect...")
                 return False
 
@@ -198,8 +203,15 @@ async def get(request: Request):
 async def get_game(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.websocket("/ws/{name}")
-async def websocket_endpoint(websocket: WebSocket, name: str):
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None)):
+    if not username:
+        await websocket.close()
+        return
+
+    name = username
     role = await manager.connect(websocket, name)
     
     current_time_left = manager.get_remaining_time()
@@ -259,4 +271,4 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                     })
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
-            await manager.broadcast({"type": "drawer_disconnected"})
+            await manager.broadcast({"type": "drawer_disconnected"}) 
