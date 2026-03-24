@@ -69,8 +69,10 @@
 <body>
     <div class="login-card">
         <h1>🎬 Movie Guess</h1>
-        <input type="text" id="playerName" class="name-input" placeholder="Enter Your Name">
-        <button onclick="startGame()" class="start-btn">START GAME</button>
+        <form action="/join" method="post">
+            <input type="text" name="name" id="playerName" class="name-input" placeholder="Enter Your Name" required>
+            <button type="submit" class="start-btn">START GAME</button>
+        </form>
     </div>
     <script>
         function startGame() {

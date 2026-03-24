@@ -3,9 +3,10 @@ import asyncio
 import time
 import pandas as pd
 import fakeredis
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, Cookie, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from typing import List, Dict
 
 app = FastAPI()
@@ -34,7 +35,7 @@ def load_movies_after_2000():
         movies = df['movie_title'].dropna().tolist()
         movies = [m.strip().upper() for m in movies]
         return movies if movies else ["INCEPTION"]
-    except Exception as e:
+    except Exception:
         return ["INCEPTION"]
 
 MOVIE_POOL = load_movies_after_2000()
@@ -69,7 +70,6 @@ class ConnectionManager:
         r.set(f"score:{name}", new_score)
 
     def get_remaining_time(self):
-        """Calculates remaining seconds based on the end_time stored in Redis"""
         end_time = r.get("round_end_time")
         if end_time:
             remaining = int(float(end_time) - time.time())
@@ -193,14 +193,26 @@ def process_movie(movie: str):
 async def get(request: Request):
     return templates.TemplateResponse("front_page.html", {"request": request})
 
+@app.post("/join")
+async def join_game(name: str = Form(...)):
+    """Receives name via POST and sets it in a cookie to prevent URL manipulation."""
+    response = RedirectResponse(url="/game", status_code=303)
+    response.set_cookie(key="player_name", value=name, httponly=True)
+    return response
+
 @app.get("/game")
-async def get_game(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def get_game(request: Request, player_name: str = Cookie(None)):
+    """Reads the name from the cookie instead of the URL query string."""
+    if not player_name:
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "player_name": player_name 
+    })
 
 @app.websocket("/ws/{name}")
 async def websocket_endpoint(websocket: WebSocket, name: str):
     role = await manager.connect(websocket, name)
-    
     current_time_left = manager.get_remaining_time()
 
     await websocket.send_json({
