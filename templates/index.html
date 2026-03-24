@@ -149,7 +149,13 @@
             <div id="setup-area">
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
-                    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 12px; width: 300px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 10px;">
+                    <select id="sectionSelect" style="padding: 10px; border-radius: 8px; background: #1e293b; color: white; border: 1px solid #334155;">
+                        <option value="Hollywood">Hollywood 🇺🇸</option>
+                        <option value="Bollywood">Bollywood 🇮🇳</option>
+                    </select>
+
+                    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 12px; width: 200px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 10px;">
+                    
                     <div>
                         <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
                         <button class="btn" onclick="generateMovie()">🎲 Random</button>
@@ -423,7 +429,13 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             ws.send(JSON.stringify({type: "clear"})); 
         }
-        function generateMovie() { ws.send(JSON.stringify({ type: "random_movie" })); }
+        function generateMovie() { 
+            const section = document.getElementById('sectionSelect').value;
+            ws.send(JSON.stringify({ 
+                type: "random_movie", 
+                section: section 
+            })); 
+        }
         ws.onclose = () => {
             stopTimer();
             document.getElementById('disconnect-overlay').classList.remove('hidden');

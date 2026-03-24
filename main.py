@@ -34,19 +34,24 @@ def shutdown_event():
     print("Server shutting down... clearing session data.")
     r.delete("round_end_time")
     
-def load_movies_after_2000():
+def load_movies_by_section():
     try:
         df = pd.read_csv("Movie_Names_Dataset.csv")
-        movies = df['Movie Name'].dropna().tolist()
-        movies = [m.strip().upper() for m in movies]
-        return movies if movies else ["INCEPTION"]
+        # Create a dictionary: {"Hollywood": [...], "Bollywood": [...]}
+        sections = {}
+        for section in df['Section'].unique():
+            movies = df[df['Section'] == section]['Movie Name'].dropna().tolist()
+            sections[section] = [m.strip().upper() for m in movies]
+        return sections
     except Exception as e:
-        return ["INCEPTION"]
+        print(f"Error loading CSV: {e}")
+        return {"Hollywood": ["INCEPTION"], "Bollywood": ["SHOLAY"]}
 
-MOVIE_POOL = load_movies_after_2000()
+# Load the structured pool
+MOVIE_POOL_DICT = load_movies_by_section()
 
 def get_random_movie():
-    return random.choice(MOVIE_POOL)
+    return random.choice(MOVIE_POOL_DICT)
 
 class ConnectionManager:
     def __init__(self):
@@ -258,7 +263,11 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None))
                 await manager.broadcast(data)
             elif data["type"] == "random_movie":
                 if name == manager.game_state["drawer_name"]:
-                    options = random.sample(MOVIE_POOL, 3)
+                    
+                    section = data.get("section", "Hollywood")
+                    pool = MOVIE_POOL_DICT.get(section, MOVIE_POOL_DICT.get("Hollywood"))
+                    
+                    options = random.sample(pool, min(3, len(pool)))
                     await websocket.send_json({
                         "type": "movie_options",
                         "options": options
