@@ -153,6 +153,7 @@
                     <div>
                         <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
                         <button class="btn" onclick="generateMovie()">🎲 Random</button>
+                        <div id="movie-options" style="margin-top:10px;"></div>
                     </div>
                 </div>
             </div>
@@ -187,6 +188,9 @@
             let data = JSON.parse(event.data);
             if (data.type === "player_list") {
                 updatePlayerList(data.players);
+            }
+            if (data.type === "movie_options") {
+                showMovieOptions(data.options);
             }
             if (data.type === "drawer_disconnected") {
                 alert("The Drawer has left the game. Redirecting...");
@@ -347,6 +351,27 @@
                     }
                     container.appendChild(input);
                 }
+            });
+        }
+        function showMovieOptions(options) {
+            const container = document.getElementById("movie-options");
+            container.innerHTML = "";
+
+            options.forEach(movie => {
+                let btn = document.createElement("button");
+                btn.className = "btn";
+                btn.style.margin = "5px";
+                btn.innerText = movie;
+
+                btn.onclick = () => {
+                    ws.send(JSON.stringify({
+                        type: "select_movie",
+                        movie: movie
+                    }));
+                    container.innerHTML = ""; // clear options after selection
+                };
+
+                container.appendChild(btn);
             });
         }
         function checkFullWord() {

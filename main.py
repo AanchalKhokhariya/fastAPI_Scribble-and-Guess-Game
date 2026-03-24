@@ -259,14 +259,23 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None))
                 await manager.broadcast(data)
             elif data["type"] == "random_movie":
                 if name == manager.game_state["drawer_name"]:
-                    movie = get_random_movie()
+                    options = random.sample(MOVIE_POOL, 3)
+                    await websocket.send_json({
+                        "type": "movie_options",
+                        "options": options
+                    })
+            elif data["type"] == "select_movie":
+                if name == manager.game_state["drawer_name"]:
+                    movie = data["movie"]
                     manager.game_state["movie"] = movie
                     manager.game_state["display_name"] = process_movie(movie)
                     manager.game_state["is_round_active"] = True
                     await manager.start_round_timer(480)
                     await manager.broadcast({
-                        "type": "game_start", "display": manager.game_state["display_name"],
-                        "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
+                        "type": "game_start",
+                        "display": manager.game_state["display_name"],
+                        "full_movie": manager.game_state["movie"],
+                        "drawer_name": manager.game_state["drawer_name"],
                         "time_left": 480
                     })
     except WebSocketDisconnect:
