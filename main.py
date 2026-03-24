@@ -91,11 +91,15 @@ class ConnectionManager:
             r.set(f"score:{name}", 0)
         
         role = "guesser"
-        if not self.game_state["drawer_assigned"]:
+
+        if name == self.game_state["drawer_name"]:
+            role = "drawer"
+
+        elif not self.game_state["drawer_assigned"]:
             self.game_state["drawer_assigned"] = True
             self.game_state["drawer_name"] = name
             role = "drawer"
-        
+                
         await self.broadcast({"type": "player_list", "players": self.get_player_data()})
         return role
 
@@ -109,13 +113,10 @@ class ConnectionManager:
             is_drawer = (name == self.game_state["drawer_name"])
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
             if is_drawer:
-                if self.round_timer_task:
-                    self.round_timer_task.cancel()
-                self.game_state["drawer_assigned"] = False
-                self.game_state["drawer_name"] = None
-                r.delete("round_end_time")
-                return True
-        return False
+                # DO NOT reset game immediately
+                # Allow reconnect (refresh case)
+                print("Drawer disconnected, waiting for reconnect...")
+                return False
 
     async def start_round_timer(self, duration=480):
         if self.round_timer_task:
@@ -226,9 +227,7 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                 })
             elif data["type"] == "won" and manager.game_state["is_round_active"]:
                 manager.game_state["is_round_active"] = False
-                if manager.round_timer_task:
-                    manager.round_timer_task.cancel()
-                r.delete("round_end_time")
+                
                 manager.set_player_score(name, 50)
                 if manager.game_state["drawer_name"]:
                     manager.set_player_score(manager.game_state["drawer_name"], 25)
