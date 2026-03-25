@@ -32,35 +32,28 @@ rooms: Dict[str, ConnectionManager] = {}
 async def join(
     name: str = Form(...), 
     room_code: str = Form(None), 
-    action: str = Form(...)
+    action: str = Form(...),
+    duration: int = Form(5) 
 ):
-    
-    if room_code and room_code.strip():
-        room_code = room_code.upper().strip()
-       
-        if action != "create": 
-            action = "join"
-
     if action == "create":
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        rooms[room_code] = ConnectionManager()
-        
+        # Ensure we use the 'duration' from the form here
+        rooms[room_code] = ConnectionManager(duration_mins=duration)
+    
     elif action == "join":
         if not room_code:
             return RedirectResponse(url="/?error=missing_code", status_code=303)
-        
+        room_code = room_code.upper().strip()
         if room_code not in rooms:
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
     response = RedirectResponse(url="/game", status_code=303)
-    
     response.set_cookie(key="username", value=name)
     response.set_cookie(key="room_id", value=room_code) 
-    
     return response
 
 @app.get("/leave")
-async def leave_room(username: str = Cookie(None), room_id: str = Cookie(None)):
+async def leave(username: str = Cookie(None), room_id: str = Cookie(None)):
     if room_id in rooms and username:
         manager = rooms[room_id]
         await manager.handle_voluntary_leave(username)
@@ -94,11 +87,14 @@ def get_random_movie():
     return random.choice(MOVIE_POOL_DICT)
 
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self, duration_mins=5): 
         self.active_connections: Dict[str, WebSocket] = {}
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
-        self.round_timer_task = None  
+        self.round_duration = duration_mins * 60  
+        
+        self.round_timer_task = None 
+        
         self.game_state = {
             "movie": "",
             "display_name": "",
@@ -166,7 +162,17 @@ class ConnectionManager:
                 print("Drawer disconnected, waiting for reconnect...")
                 return False
 
-    async def start_round_timer(self, duration=480):
+    async def start_round_timer(self, duration=None):
+        if duration is None:
+            duration = self.round_duration
+        
+        if self.round_timer_task:
+            self.round_timer_task.cancel()
+        
+        end_timestamp = time.time() + duration
+
+        r.set(f"round_end_time:{id(self)}", end_timestamp)
+        
         if self.round_timer_task:
             self.round_timer_task.cancel()
         
@@ -178,9 +184,8 @@ class ConnectionManager:
                 await asyncio.sleep(duration)  
                 if self.game_state["is_round_active"]:
                     self.game_state["is_round_active"] = False
-                    self.game_state["winner_announcement"] = "⏰ Time's up! No one guessed."
+                    self.game_state["winner_announcement"] = "⏰ Time's up!"
                     self.game_state["revealed_movie"] = self.game_state["movie"]
-                    r.delete("round_end_time")
                     await self.broadcast({
                         "type": "announcement",
                         "message": self.game_state["winner_announcement"],
@@ -232,16 +237,16 @@ class ConnectionManager:
                 continue
 
     async def handle_voluntary_leave(self, name: str):
-        """Specifically handles when a player clicks the Leave button."""
+        """Called when a player clicks the 'Leave' button."""
         if name in self.active_connections:
-           
+            
             ws = self.active_connections.pop(name)
-            if name in self.ws_to_name:
+            if id(ws) in self.ws_to_name:
                 del self.ws_to_name[id(ws)]
             
             
             if name == self.game_state["drawer_name"]:
-                print(f"Drawer {name} left voluntarily. Reassigning...")
+                print(f"Drawer {name} left. Reassigning...")
                 if self.active_connections:
                     new_drawer = random.choice(list(self.active_connections.keys()))
                     self.game_state["drawer_name"] = new_drawer
@@ -250,7 +255,7 @@ class ConnectionManager:
                 else:
                     self.game_state["drawer_assigned"] = False
                     self.game_state["drawer_name"] = None
-           
+            
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
 
 manager = ConnectionManager()
@@ -307,11 +312,15 @@ async def websocket_endpoint(
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["display_name"] = process_movie(manager.game_state["movie"])
                 manager.game_state["is_round_active"] = True
-                await manager.start_round_timer(480)
+                
+                await manager.start_round_timer(duration=manager.round_duration)
+                
                 await manager.broadcast({
-                    "type": "game_start", "display": manager.game_state["display_name"],
-                    "full_movie": manager.game_state["movie"], "drawer_name": manager.game_state["drawer_name"],
-                    "time_left": 480
+                    "type": "game_start", 
+                    "display": manager.game_state["display_name"],
+                    "full_movie": manager.game_state["movie"], 
+                    "drawer_name": manager.game_state["drawer_name"],
+                    "time_left": manager.round_duration 
                 })
             elif data["type"] == "won" and manager.game_state["is_round_active"]:
                 manager.game_state["is_round_active"] = False
@@ -350,13 +359,13 @@ async def websocket_endpoint(
                     manager.game_state["movie"] = movie
                     manager.game_state["display_name"] = process_movie(movie)
                     manager.game_state["is_round_active"] = True
-                    await manager.start_round_timer(480)
+                    await manager.start_round_timer(duration=manager.round_duration)
                     await manager.broadcast({
                         "type": "game_start",
                         "display": manager.game_state["display_name"],
                         "full_movie": manager.game_state["movie"],
                         "drawer_name": manager.game_state["drawer_name"],
-                        "time_left": 480
+                        "time_left": manager.round_duration # Use the dynamic duration
                     })
     except WebSocketDisconnect:
         if await manager.disconnect(websocket):
