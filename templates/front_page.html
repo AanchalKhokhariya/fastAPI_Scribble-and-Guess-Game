@@ -70,17 +70,38 @@
     <div class="login-card">
         <h1>🎬 Movie Guess</h1>
 
-        <form action="/join" method="POST">
-            <input 
-                type="text" 
-                name="name" 
-                class="name-input" 
-                placeholder="Enter Your Name"
-                required
-            >
-            <button type="submit" class="start-btn">START GAME</button>
-        </form>
+        <form action="/join" method="POST" id="gameForm">
+            <input type="text" name="name" class="name-input" placeholder="Enter Your Name" required>
+            
+            <div id="join-section" style="display: none; margin-bottom: 20px;">
+                <input type="text" name="room_code" id="roomInput" class="name-input" placeholder="6-Digit Code" maxlength="6">
+            </div>
 
+            <input type="hidden" name="action" id="actionInput" value="create">
+            
+            <div id="button-container" style="display: flex; gap: 10px; flex-direction: column;">
+                <button type="submit" id="submitBtn" class="start-btn">Create Room</button>
+                
+                <button type="button" id="showJoinBtn" onclick="toggleJoinUI()" class="start-btn" style="background: #334155;">I have a code</button>
+            </div>
+        </form>
     </div>
+
+<script>
+    function toggleJoinUI() {
+        document.getElementById('join-section').style.display = 'block';
+        document.getElementById('submitBtn').innerText = 'Join Room';
+        document.getElementById('actionInput').value = 'join';
+        document.getElementById('showJoinBtn').style.display = 'none';
+        document.getElementById('roomInput').required = true;
+    }
+    function setAction(val) {
+        const input = document.getElementById('roomInput');
+        if (val === 'create') {
+            document.getElementById('actionInput').value = 'create';
+            input.required = false;
+        }
+    }
+</script>
 </body>
 </html>

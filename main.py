@@ -1,6 +1,7 @@
 import random
 import asyncio
 import time
+import string 
 import pandas as pd
 import fakeredis
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form, Cookie
@@ -10,8 +11,8 @@ from typing import List, Dict
 from fastapi.responses import RedirectResponse
 
 app = FastAPI()
-
 r = fakeredis.FakeRedis(decode_responses=True)
+templates = Jinja2Templates(directory="templates")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,33 +22,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+rooms: Dict[str, ConnectionManager] = {}
 
 @app.post("/join")
-async def join(name: str = Form(...)):
-    response = RedirectResponse(url="/game", status_code=303)
+async def join(
+    name: str = Form(...), 
+    room_code: str = Form(None), 
+    action: str = Form(...)
+):
+    
+    if room_code and room_code.strip():
+        room_code = room_code.upper().strip()
+       
+        if action != "create": 
+            action = "join"
+
+    if action == "create":
+        room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        rooms[room_code] = ConnectionManager()
+        
+    elif action == "join":
+        if not room_code:
+            return RedirectResponse(url="/?error=missing_code", status_code=303)
+        
+        if room_code not in rooms:
+            return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
+
+    response = RedirectResponse(url=f"/game?room={room_code}", status_code=303)
     response.set_cookie(key="username", value=name)
     return response
-templates = Jinja2Templates(directory="templates")
+
 @app.on_event("shutdown")
 def shutdown_event():
-    """Clean up Redis when the server stops"""
-    print("Server shutting down... clearing session data.")
     r.delete("round_end_time")
     
 def load_movies_by_section():
     try:
         df = pd.read_csv("Movie_Names_Dataset.csv")
-        # Create a dictionary: {"Hollywood": [...], "Bollywood": [...]}
         sections = {}
         for section in df['Section'].unique():
             movies = df[df['Section'] == section]['Movie Name'].dropna().tolist()
             sections[section] = [m.strip().upper() for m in movies]
         return sections
     except Exception as e:
-        print(f"Error loading CSV: {e}")
         return {"Hollywood": ["INCEPTION"], "Bollywood": ["SHOLAY"]}
 
-# Load the structured pool
+
 MOVIE_POOL_DICT = load_movies_by_section()
 
 def get_random_movie():
@@ -59,7 +83,6 @@ class ConnectionManager:
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
         self.round_timer_task = None  
-        
         self.game_state = {
             "movie": "",
             "display_name": "",
@@ -199,22 +222,30 @@ def process_movie(movie: str):
     return "".join([char if (char in vowels or not char.isalnum()) else "_" for char in movie])
 
 
+rooms: Dict[str, ConnectionManager] = {}
+
 @app.get("/")
 async def get(request: Request):
     return templates.TemplateResponse("front_page.html", {"request": request})
 
 @app.get("/game")
-async def get_game(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def get_game(request: Request, room: str):
+    return templates.TemplateResponse("index.html", {"request": request, "room_code": room})
 
 
+@app.websocket("/ws/{room_code}")
+async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str = Cookie(None)):
+    
+    if room_code not in rooms:
+        await websocket.close()
+        return
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None)):
     if not username:
         await websocket.close()
         return
 
+    manager = rooms[room_code]
+    
     name = username
     role = await manager.connect(websocket, name)
     
