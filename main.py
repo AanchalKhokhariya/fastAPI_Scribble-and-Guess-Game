@@ -57,7 +57,19 @@ async def join(
     response.set_cookie(key="username", value=name)
     response.set_cookie(key="room_id", value=room_code) 
     
-    print(f"DEBUG: Cookies set for {name} in room {room_code}")
+    return response
+
+@app.get("/leave")
+async def leave_room(username: str = Cookie(None), room_id: str = Cookie(None)):
+    if room_id in rooms and username:
+        manager = rooms[room_id]
+        await manager.handle_voluntary_leave(username)
+        
+        if not manager.active_connections:
+            del rooms[room_id]
+
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("room_id")
     return response
 
 @app.on_event("shutdown")
@@ -219,6 +231,28 @@ class ConnectionManager:
             except:
                 continue
 
+    async def handle_voluntary_leave(self, name: str):
+        """Specifically handles when a player clicks the Leave button."""
+        if name in self.active_connections:
+           
+            ws = self.active_connections.pop(name)
+            if name in self.ws_to_name:
+                del self.ws_to_name[id(ws)]
+            
+            
+            if name == self.game_state["drawer_name"]:
+                print(f"Drawer {name} left voluntarily. Reassigning...")
+                if self.active_connections:
+                    new_drawer = random.choice(list(self.active_connections.keys()))
+                    self.game_state["drawer_name"] = new_drawer
+                    
+                    await self.restart_game()
+                else:
+                    self.game_state["drawer_assigned"] = False
+                    self.game_state["drawer_name"] = None
+           
+            await self.broadcast({"type": "player_list", "players": self.get_player_data()})
+
 manager = ConnectionManager()
 
 def process_movie(movie: str):
@@ -234,24 +268,22 @@ async def get(request: Request):
 
 @app.get("/game")
 async def get_game(request: Request, room_id: str = Cookie(None)):
-    # If the user tries to go to /game without joining a room first
+    
     if not room_id:
         return RedirectResponse(url="/", status_code=303)
     
-    # We pass room_id to the template just so the UI can display "ROOM: ABCD"
     return templates.TemplateResponse("index.html", {
         "request": request, 
         "room_code": room_id
     })
 
-@app.websocket("/ws") # Removed /{room_code} from the path
+@app.websocket("/ws") 
 async def websocket_endpoint(
     websocket: WebSocket, 
     username: str = Cookie(None), 
-    room_id: str = Cookie(None) # Get room from cookie
+    room_id: str = Cookie(None) 
 ):
     if not username or not room_id or room_id not in rooms:
-        print("REJECTED: Missing credentials or invalid room cookie.")
         await websocket.close()
         return
 
