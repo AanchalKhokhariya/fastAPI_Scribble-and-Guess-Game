@@ -52,8 +52,12 @@ async def join(
         if room_code not in rooms:
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
-    response = RedirectResponse(url=f"/game?room={room_code}", status_code=303)
+    response = RedirectResponse(url="/game", status_code=303)
+    
     response.set_cookie(key="username", value=name)
+    response.set_cookie(key="room_id", value=room_code) 
+    
+    print(f"DEBUG: Cookies set for {name} in room {room_code}")
     return response
 
 @app.on_event("shutdown")
@@ -229,26 +233,31 @@ async def get(request: Request):
     return templates.TemplateResponse("front_page.html", {"request": request})
 
 @app.get("/game")
-async def get_game(request: Request, room: str):
-    return templates.TemplateResponse("index.html", {"request": request, "room_code": room})
-
-
-@app.websocket("/ws/{room_code}")
-async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str = Cookie(None)):
+async def get_game(request: Request, room_id: str = Cookie(None)):
+    # If the user tries to go to /game without joining a room first
+    if not room_id:
+        return RedirectResponse(url="/", status_code=303)
     
-    if room_code not in rooms:
+    # We pass room_id to the template just so the UI can display "ROOM: ABCD"
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "room_code": room_id
+    })
+
+@app.websocket("/ws") # Removed /{room_code} from the path
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    username: str = Cookie(None), 
+    room_id: str = Cookie(None) # Get room from cookie
+):
+    if not username or not room_id or room_id not in rooms:
+        print("REJECTED: Missing credentials or invalid room cookie.")
         await websocket.close()
         return
 
-    if not username:
-        await websocket.close()
-        return
-
-    manager = rooms[room_code]
-    
+    manager = rooms[room_id]
+    role = await manager.connect(websocket, username)
     name = username
-    role = await manager.connect(websocket, name)
-    
     current_time_left = manager.get_remaining_time()
 
     await websocket.send_json({
