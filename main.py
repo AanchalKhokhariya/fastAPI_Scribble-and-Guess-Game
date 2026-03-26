@@ -104,7 +104,8 @@ class ConnectionManager:
             "drawer_name": None,
             "is_round_active": False,
             "winner_announcement": None,
-            "revealed_movie": None
+            "revealed_movie": None,
+            "show_vowels": True   
         }
 
     def get_player_score(self, name: str):
@@ -189,6 +190,8 @@ class ConnectionManager:
         
         end_timestamp = time.time() + duration
         r.set("round_end_time", end_timestamp)
+        
+        self.game_state["is_round_active"] = True 
 
         async def timer():
             try:
@@ -270,10 +273,12 @@ class ConnectionManager:
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
 manager = ConnectionManager()
 
-def process_movie(movie: str):
-    vowels = "AEIOUaeiou "
-    return "".join([char if (char in vowels or not char.isalnum()) else "_" for char in movie])
-
+def process_movie(movie: str, show_vowels: bool = True):
+    if show_vowels:
+        vowels = "AEIOUaeiou "
+        return "".join([char if (char in vowels or not char.isalnum()) else "_" for char in movie])
+    else:
+        return "".join(["_" if char.isalnum() else char for char in movie])
 
 rooms: Dict[str, ConnectionManager] = {}
 
@@ -323,8 +328,12 @@ async def websocket_endpoint(
             data = await websocket.receive_json()
             if data["type"] == "set_movie":
                 manager.game_state["movie"] = data["movie"].upper()
-                manager.game_state["display_name"] = process_movie(manager.game_state["movie"])
-                manager.game_state["is_round_active"] = True
+                manager.game_state["show_vowels"] = data.get("show_vowels", True)
+
+                manager.game_state["display_name"] = process_movie(
+                    manager.game_state["movie"],
+                    manager.game_state["show_vowels"]
+                )
                 
                 await manager.start_round_timer(duration=manager.round_duration)
                 
@@ -337,15 +346,23 @@ async def websocket_endpoint(
                 })
             elif data["type"] == "won" and manager.game_state["is_round_active"]:
                 manager.game_state["is_round_active"] = False
-                
-                manager.set_player_score(name, 50)
+
+                if manager.round_timer_task:
+                    manager.round_timer_task.cancel()
+                    manager.round_timer_task = None
+
+                manager.set_player_score(username, 50) 
                 if manager.game_state["drawer_name"]:
                     manager.set_player_score(manager.game_state["drawer_name"], 25)
-                manager.game_state["winner_announcement"] = f"🎉 {name} guessed it first!"
+
+                manager.game_state["winner_announcement"] = f"🎉 {username} guessed it first!"
                 manager.game_state["revealed_movie"] = manager.game_state["movie"]
+
                 await manager.broadcast({"type": "player_list", "players": manager.get_player_data()})
                 await manager.broadcast({
-                    "type": "announcement", "message": manager.game_state["winner_announcement"], "reveal": manager.game_state["revealed_movie"]
+                    "type": "announcement",
+                    "message": manager.game_state["winner_announcement"],
+                    "reveal": manager.game_state["revealed_movie"]
                 })
             elif data["type"] == "restart":
                 await manager.restart_game()
@@ -370,8 +387,12 @@ async def websocket_endpoint(
                 if name == manager.game_state["drawer_name"]:
                     movie = data["movie"]
                     manager.game_state["movie"] = movie
-                    manager.game_state["display_name"] = process_movie(movie)
-                    manager.game_state["is_round_active"] = True
+                    manager.game_state["show_vowels"] = data.get("show_vowels", True)
+
+                    manager.game_state["display_name"] = process_movie(
+                        movie,
+                        manager.game_state["show_vowels"]
+                    )
                     await manager.start_round_timer(duration=manager.round_duration)
                     await manager.broadcast({
                         "type": "game_start",
@@ -392,6 +413,5 @@ async def websocket_endpoint(
                 "type": "drawer_disconnected",
                 "name": name
             })
-            # Reset the game since the drawer is gone
             await asyncio.sleep(2)
             await manager.restart_game()

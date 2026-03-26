@@ -176,6 +176,12 @@
             <div id="setup-area">
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
+                    <div style="margin: 10px 0;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="hintToggle" checked style="transform: scale(1.3);">
+                            <span>Show Vowel Hints</span>
+                        </label>
+                    </div>
                     <select id="sectionSelect" style="padding: 10px; border-radius: 8px; background: #1e293b; color: white; border: 1px solid #334155;">
                         <option value="Hollywood">Hollywood 🇺🇸</option>
                         <option value="Bollywood">Bollywood 🇮🇳</option>
@@ -370,7 +376,15 @@
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
-            if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
+            let showVowels = document.getElementById('hintToggle').checked;
+
+            if(val) {
+                ws.send(JSON.stringify({
+                    type: "set_movie",
+                    movie: val,
+                    show_vowels: showVowels
+                }));
+            }
         }
         function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display'); 
@@ -423,10 +437,14 @@
                 btn.innerText = movie;
 
                 btn.onclick = () => {
+                    const showVowels = document.getElementById('hintToggle').checked;
+
                     ws.send(JSON.stringify({
                         type: "select_movie",
-                        movie: movie
+                        movie: movie,
+                        show_vowels: showVowels
                     }));
+
                     container.innerHTML = "";
                 };
                 container.appendChild(btn);
@@ -489,6 +507,25 @@
                 window.location.href = "/leave";
             }
         } 
+        let hasWon = false;
+
+        function checkFullWord() {
+            if (hasWon) return;
+
+            if (document.getElementById('congrats-area').style.display === "block") return;
+
+            let inputs = document.querySelectorAll('.letter-input');
+            let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
+
+            inputs.forEach(input => {
+                guessArr[input.dataset.index] = input.value.toUpperCase();
+            });
+
+            if (guessArr.join("") === targetMovie) {
+                hasWon = true;   
+                ws.send(JSON.stringify({type: "won"}));
+            }
+        }
     </script>
 </body>
 </html>
