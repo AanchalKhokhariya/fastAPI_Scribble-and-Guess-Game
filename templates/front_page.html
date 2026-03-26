@@ -69,6 +69,15 @@
 <body>
     <div class="login-card">
         <h1>🎬 Movie Guess</h1>
+        <div id="error-box" style="
+            display:none;
+            background: rgba(255, 71, 87, 0.15);
+            color: #ff6b81;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        "></div>
 
         <form action="/join" method="POST" id="gameForm">
             <input type="text" name="name" class="name-input" placeholder="Enter Your Name" required>
@@ -110,6 +119,28 @@
             input.required = false;
         }
     }
+
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+
+    if (error) {
+        const errorBox = document.getElementById("error-box");
+        errorBox.style.display = "block";
+
+        if (error === "name_taken") {
+            errorBox.innerText = "⚠️ Username already exists in this room. Try another name.";
+        } 
+        else if (error === "not_found") {
+            errorBox.innerText = "❌ Room not found. Check your code.";
+        } 
+        else if (error === "missing_code") {
+            errorBox.innerText = "⚠️ Please enter a room code.";
+        } 
+        else {
+            errorBox.innerText = "Something went wrong.";
+        }
+    }
+
 </script>
 </body>
 </html>

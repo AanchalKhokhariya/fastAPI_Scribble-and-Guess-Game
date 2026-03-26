@@ -41,12 +41,14 @@ async def join(
         rooms[room_code] = ConnectionManager(duration_mins=duration)
     
     elif action == "join":
-        if not room_code:
-            return RedirectResponse(url="/?error=missing_code", status_code=303)
         room_code = room_code.upper().strip()
+
         if room_code not in rooms:
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
+        if name in rooms[room_code].active_connections:
+            return RedirectResponse(url=f"/?error=name_taken", status_code=303)
+        
     response = RedirectResponse(url="/game", status_code=303)
     response.set_cookie(key="username", value=name)
     response.set_cookie(key="room_id", value=room_code) 
@@ -128,6 +130,15 @@ class ConnectionManager:
         return sorted(players, key=lambda x: x['score'], reverse=True)
 
     async def connect(self, websocket: WebSocket, name: str):
+        if name in self.active_connections:
+            await websocket.accept()
+            await websocket.send_json({
+                "type": "error",
+                "message": "Username already taken. Please choose another name."
+            })
+            await websocket.close()
+            return None
+
         await websocket.accept()
         ws_id = id(websocket)
         self.active_connections[name] = websocket
@@ -294,6 +305,9 @@ async def websocket_endpoint(
 
     manager = rooms[room_id]
     role = await manager.connect(websocket, username)
+
+    if role is None:
+        return  
     name = username
     current_time_left = manager.get_remaining_time()
 
