@@ -248,19 +248,19 @@ class ConnectionManager:
                 continue
 
     async def handle_voluntary_leave(self, name: str):
-        """Called when a player clicks the 'Leave' button."""
         if name in self.active_connections:
-            
             ws = self.active_connections.pop(name)
             if id(ws) in self.ws_to_name:
                 del self.ws_to_name[id(ws)]
             
-            
             if name == self.game_state["drawer_name"]:
-                print(f"Drawer {name} left. Reassigning...")
+                
+                await self.broadcast({
+                    "type": "drawer_disconnected", 
+                    "name": name
+                })
+                
                 if self.active_connections:
-                    new_drawer = random.choice(list(self.active_connections.keys()))
-                    self.game_state["drawer_name"] = new_drawer
                     
                     await self.restart_game()
                 else:
@@ -268,7 +268,6 @@ class ConnectionManager:
                     self.game_state["drawer_name"] = None
             
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
-
 manager = ConnectionManager()
 
 def process_movie(movie: str):
@@ -379,8 +378,20 @@ async def websocket_endpoint(
                         "display": manager.game_state["display_name"],
                         "full_movie": manager.game_state["movie"],
                         "drawer_name": manager.game_state["drawer_name"],
-                        "time_left": manager.round_duration # Use the dynamic duration
+                        "time_left": manager.round_duration 
                     })
     except WebSocketDisconnect:
-        if await manager.disconnect(websocket):
-            await manager.broadcast({"type": "drawer_disconnected"}) 
+        
+        name = manager.ws_to_name.get(id(websocket))
+        is_drawer = (name == manager.game_state["drawer_name"])
+        
+        await manager.disconnect(websocket)
+        
+        if is_drawer:
+            await manager.broadcast({
+                "type": "drawer_disconnected",
+                "name": name
+            })
+            # Reset the game since the drawer is gone
+            await asyncio.sleep(2)
+            await manager.restart_game()

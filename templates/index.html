@@ -126,9 +126,30 @@
             max-width: 90%;
             margin: 20px auto;
         }
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            background: #ef4444; 
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            margin-top: 10px;
+            font-weight: 600;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <div id="toast-container"></div>
     <header>
         <h1>🎬 Movie Guess</h1>
         <div style="display: flex; align-items: center; gap: 20px;">
@@ -212,9 +233,21 @@
                 showMovieOptions(data.options);
             }
             if (data.type === "drawer_disconnected") {
-                alert("The Drawer has left the game. Redirecting...");
-                window.location.href = "/";
-                return;
+                showToast(`⚠️ Drawer (${data.name}) has left. Selecting new drawer...`);
+            }
+            function showToast(message) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.innerText = message;
+                container.appendChild(toast);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = '0.5s';
+                    setTimeout(() => toast.remove(), 500);
+                }, 5000);
             }
             if (data.type === "init") {
                 myRole = data.role; targetMovie = "";
