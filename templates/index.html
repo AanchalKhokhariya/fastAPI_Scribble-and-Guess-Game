@@ -229,12 +229,22 @@
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
         let countdownInterval = null;
         let timeLeft = 0; 
+        let previousScores = {};
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             if (data.type === "player_list") {
-                window.lastPlayerData = data.players; 
-                updatePlayerList(data.players);
-            }
+                data.players.forEach(p => {
+                    if (previousScores[p.name] !== undefined && p.score > previousScores[p.name]) {
+                        const pointsGained = p.score - previousScores[p.name];
+                        const displayName = (p.name === myName) ? "You" : p.name;
+                        showToast(`🎉 ${displayName} gained ${pointsGained} points!`);
+                    }
+                    previousScores[p.name] = p.score;
+                });
+
+        window.lastPlayerData = data.players; 
+        updatePlayerList(data.players);
+    }
             if (data.type === "movie_options") {
                 showMovieOptions(data.options);
             }
