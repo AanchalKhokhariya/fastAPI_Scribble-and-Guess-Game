@@ -93,7 +93,8 @@ class ConnectionManager:
         self.active_connections: Dict[str, WebSocket] = {}
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
-        self.round_duration = duration_mins * 60  
+        self.round_duration = duration_mins * 60
+        self.movie_history: List[str] = []
         
         self.round_timer_task = None 
         
@@ -316,11 +317,17 @@ async def websocket_endpoint(
     current_time_left = manager.get_remaining_time()
 
     await websocket.send_json({
-        "type": "init", "role": role, "movie_set": bool(manager.game_state["movie"]),
-        "display": manager.game_state["display_name"], "full_movie": manager.game_state["movie"],
-        "drawer_name": manager.game_state["drawer_name"], "history": manager.draw_history,
-        "winner_msg": manager.game_state["winner_announcement"], "revealed": manager.game_state["revealed_movie"],
-        "time_left": current_time_left 
+        "type": "init", 
+        "role": role, 
+        "movie_set": bool(manager.game_state["movie"]),
+        "display": manager.game_state["display_name"], 
+        "full_movie": manager.game_state["movie"],
+        "drawer_name": manager.game_state["drawer_name"], 
+        "history": manager.draw_history,
+        "winner_msg": manager.game_state["winner_announcement"], 
+        "revealed": manager.game_state["revealed_movie"],
+        "time_left": current_time_left, 
+        "history_movies": manager.movie_history
     })
     
     try:
@@ -329,6 +336,7 @@ async def websocket_endpoint(
             if data["type"] == "set_movie":
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["show_vowels"] = data.get("show_vowels", True)
+                manager.movie_history.append(manager.game_state["movie"])
 
                 manager.game_state["display_name"] = process_movie(
                     manager.game_state["movie"],
@@ -388,6 +396,8 @@ async def websocket_endpoint(
                     movie = data["movie"]
                     manager.game_state["movie"] = movie
                     manager.game_state["show_vowels"] = data.get("show_vowels", True)
+                    manager.movie_history.append(movie)
+                    manager.game_state["movie"] = movie
 
                     manager.game_state["display_name"] = process_movie(
                         movie,

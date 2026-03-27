@@ -146,6 +146,7 @@
             from { transform: translateX(-100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        
     </style>
 </head>
 <body>
@@ -158,6 +159,7 @@
                 <p id="room-display" style="margin: 0; font-weight: bold; color: var(--accent);">ROOM: {{ room_code }}</p>
                 <p id="player-welcome" style="margin: 0; font-size: 0.8rem; color: var(--text-dim);">{{ username }}</p>
             </div>
+            <button onclick="toggleHistory()" class="btn" style="padding:5px 10px;">📜</button>
             <button onclick="leaveGame()" class="btn" style="background: #ef4444; border: none; padding: 5px 15px;">Leave Room</button>
         </div>
     </header>
@@ -263,6 +265,10 @@
                 }, 5000);
             }
             if (data.type === "init") {
+                if (data.history_movies) {
+                    movieHistory = data.history_movies;
+                    renderHistory();
+                }
                 if (data.round_number) {
                     currentRound = data.round_number;
                     document.getElementById('round-display').innerText = "ROUND: " + currentRound;
@@ -298,6 +304,10 @@
                 }
             }
             if (data.type === "game_start") {
+                if (data.full_movie) {
+                    movieHistory.push(data.full_movie);
+                    renderHistory();
+                }
                 currentRound = data.round_number || (currentRound + 1); 
                 document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
@@ -535,6 +545,45 @@
                 ws.send(JSON.stringify({type: "won"}));
             }
         }
+        let movieHistory = [];
+        function renderHistory() {
+            const container = document.getElementById("history-list");
+            container.innerHTML = "";
+
+            if (movieHistory.length === 0) {
+                container.innerHTML = "<p>No movies yet</p>";
+                return;
+            }
+
+            movieHistory.slice().reverse().forEach((movie, index) => {
+                const div = document.createElement("div");
+                div.style.padding = "10px";
+                div.style.marginBottom = "8px";
+                div.style.background = "rgba(255,255,255,0.05)";
+                div.style.borderRadius = "8px";
+                div.innerText = `${index + 1}. ${movie}`;
+                container.appendChild(div);
+            });
+        }
+        function toggleHistory() {
+            const modal = document.getElementById("history-modal");
+            modal.classList.toggle("hidden");
+        }
     </script>
+    <div id="history-modal" class="hidden" style="
+        position: fixed;
+        top: 0; right: 0;
+        width: 300px;
+        height: 100%;
+        background: #1e293b;
+        border-left: 1px solid rgba(255,255,255,0.1);
+        padding: 20px;
+        overflow-y: auto;
+        z-index: 9999;
+    ">
+        <h3 style="margin-top:0;">🎬 Movie History</h3>
+        <div id="history-list"></div>
+    </div>
 </body>
 </html>
+<!-- I want to add one more feature that at top right corner put a history icon and if any player click on that show the movies that came mean the list of movie that came for guesseing  -->
