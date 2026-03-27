@@ -146,7 +146,13 @@
             from { transform: translateX(-100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-        
+        #history-modal {
+            transition: transform 0.3s ease;
+            transform: translateX(100%);
+        }
+        #history-modal:not(.hidden) {
+            transform: translateX(0);
+        }
     </style>
 </head>
 <body>
@@ -567,9 +573,20 @@
         }
         function toggleHistory() {
             const modal = document.getElementById("history-modal");
+            const overlay = document.getElementById("history-overlay");
+
             modal.classList.toggle("hidden");
+            overlay.classList.toggle("hidden");
         }
     </script>
+    <div id="history-overlay" class="hidden" onclick="toggleHistory()" style="
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 9998;
+    "></div>
     <div id="history-modal" class="hidden" style="
         position: fixed;
         top: 0; right: 0;
@@ -581,9 +598,11 @@
         overflow-y: auto;
         z-index: 9999;
     ">
-        <h3 style="margin-top:0;">🎬 Movie History</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">🎬 Movie History</h3>
+            <button onclick="toggleHistory()" class="btn" style="padding:5px 10px;">❌</button>
+        </div>
         <div id="history-list"></div>
     </div>
 </body>
 </html>
-<!-- I want to add one more feature that at top right corner put a history icon and if any player click on that show the movies that came mean the list of movie that came for guesseing  -->
