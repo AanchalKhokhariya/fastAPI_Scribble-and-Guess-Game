@@ -154,6 +154,7 @@
         <h1>🎬 Movie Guess</h1>
         <div style="display: flex; align-items: center; gap: 20px;">
             <div style="text-align: right;">
+                <p id="round-display" style="margin: 0; font-weight: bold; color: var(--success);">ROUND: 1</p>
                 <p id="room-display" style="margin: 0; font-weight: bold; color: var(--accent);">ROOM: {{ room_code }}</p>
                 <p id="player-welcome" style="margin: 0; font-size: 0.8rem; color: var(--text-dim);">{{ username }}</p>
             </div>
@@ -186,9 +187,7 @@
                         <option value="Hollywood">Hollywood 🇺🇸</option>
                         <option value="Bollywood">Bollywood 🇮🇳</option>
                     </select>
-
                     <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 12px; width: 200px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 10px;">
-                    
                     <div>
                         <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
                         <button class="btn" onclick="generateMovie()">🎲 Random</button>
@@ -215,6 +214,7 @@
         </div>
     </div>
     <script>
+        let currentRound = 1;
         function getCookie(name) {
             let value = `; ${document.cookie}`;
             let parts = value.split(`; ${name}=`);
@@ -241,7 +241,6 @@
                     }
                     previousScores[p.name] = p.score;
                 });
-
         window.lastPlayerData = data.players; 
         updatePlayerList(data.players);
     }
@@ -257,8 +256,6 @@
                 toast.className = 'toast';
                 toast.innerText = message;
                 container.appendChild(toast);
-                
-                // Auto-remove after 5 seconds
                 setTimeout(() => {
                     toast.style.opacity = '0';
                     toast.style.transition = '0.5s';
@@ -266,6 +263,10 @@
                 }, 5000);
             }
             if (data.type === "init") {
+                if (data.round_number) {
+                    currentRound = data.round_number;
+                    document.getElementById('round-display').innerText = "ROUND: " + currentRound;
+                }
                 myRole = data.role; targetMovie = "";
                 stopTimer();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -297,11 +298,14 @@
                 }
             }
             if (data.type === "game_start") {
+                currentRound = data.round_number || (currentRound + 1); 
+                document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
                 startTimer(data.time_left || 300);
+                hasWon = false; 
             }
             if (data.type === "announcement") {
                 stopTimer();
@@ -357,6 +361,10 @@
         function showAnnouncement(msg, reveal) {
             document.getElementById('congrats-text').innerText = msg;
             document.getElementById('congrats-area').style.display = "block";
+            const restartBtn = document.querySelector('.btn-restart');
+            if (restartBtn) {
+                restartBtn.innerText = `Start Round ${currentRound}`;
+            }
             if (reveal) {
                 document.getElementById('movie-reveal').classList.remove('hidden');
                 document.getElementById('revealed-name').innerText = reveal;
@@ -387,7 +395,6 @@
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
             let showVowels = document.getElementById('hintToggle').checked;
-
             if(val) {
                 ws.send(JSON.stringify({
                     type: "set_movie",
@@ -445,16 +452,13 @@
                 btn.className = "btn";
                 btn.style.margin = "5px";
                 btn.innerText = movie;
-
                 btn.onclick = () => {
                     const showVowels = document.getElementById('hintToggle').checked;
-
                     ws.send(JSON.stringify({
                         type: "select_movie",
                         movie: movie,
                         show_vowels: showVowels
                     }));
-
                     container.innerHTML = "";
                 };
                 container.appendChild(btn);
@@ -518,19 +522,14 @@
             }
         } 
         let hasWon = false;
-
         function checkFullWord() {
             if (hasWon) return;
-
             if (document.getElementById('congrats-area').style.display === "block") return;
-
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
-
             inputs.forEach(input => {
                 guessArr[input.dataset.index] = input.value.toUpperCase();
             });
-
             if (guessArr.join("") === targetMovie) {
                 hasWon = true;   
                 ws.send(JSON.stringify({type: "won"}));
