@@ -223,6 +223,8 @@ class ConnectionManager:
         self.round_timer_task = asyncio.create_task(timer())
 
     async def restart_game(self):
+        self.increment_round() 
+        new_round = self.get_round()
         if self.round_timer_task:
             self.round_timer_task.cancel()
             self.round_timer_task = None
@@ -250,6 +252,7 @@ class ConnectionManager:
             await ws.send_json({
                 "type": "init",
                 "role": role,
+                "round_number": new_round, 
                 "movie_set": False,
                 "drawer_name": new_drawer_name
             })
@@ -325,10 +328,12 @@ async def websocket_endpoint(
         return  
     name = username
     current_time_left = manager.get_remaining_time()
+    current_round = manager.get_round()
 
     await websocket.send_json({
         "type": "init", 
         "role": role, 
+        "round_number": current_round,
         "movie_set": bool(manager.game_state["movie"]),
         "display": manager.game_state["display_name"], 
         "full_movie": manager.game_state["movie"],
