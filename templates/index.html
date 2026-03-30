@@ -314,7 +314,7 @@
                     movieHistory.push(data.full_movie);
                     renderHistory();
                 }
-                currentRound = data.round_number || (currentRound + 1); 
+                currentRound = data.round_number || (currentRound); 
                 document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
@@ -379,7 +379,7 @@
             document.getElementById('congrats-area').style.display = "block";
             const restartBtn = document.querySelector('.btn-restart');
             if (restartBtn) {
-                restartBtn.innerText = `Start Round ${currentRound}`;
+                restartBtn.innerText = `Start Round ${currentRound + 1}`;
             }
             if (reveal) {
                 document.getElementById('movie-reveal').classList.remove('hidden');
