@@ -183,6 +183,9 @@
             <div id="status-bar"><span id="drawer-status">Waiting for game...</span></div>
             <div id="timer-display" class="hidden">⏱️ <span id="time-left">05:00</span></div>
             <div id="setup-area">
+                <div id="selection-timer" class="hidden" style="color: #ffb703; font-weight: bold; margin-bottom: 10px;">
+                    Time to pick: <span id="selection-seconds">60</span>s
+                </div>
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
                     <div style="margin: 10px 0;">
@@ -238,6 +241,7 @@
         let countdownInterval = null;
         let timeLeft = 0; 
         let previousScores = {};
+        let selectionInterval = null;
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
             if (data.type === "player_list") {
@@ -308,6 +312,29 @@
                     document.getElementById('setup-area').classList.remove('hidden');
                     document.getElementById('game-area').classList.add('hidden');
                 }
+            }
+            if (!data.movie_set) {
+                startSelectionCountdown(60);
+                document.getElementById('selection-timer').classList.remove('hidden');
+            } else {
+                stopSelectionCountdown();
+            }
+
+            function startSelectionCountdown(seconds) {
+                stopSelectionCountdown();
+                let timeLeft = seconds;
+                const display = document.getElementById('selection-seconds');
+                
+                selectionInterval = setInterval(() => {
+                    timeLeft--;
+                    display.innerText = timeLeft;
+                    if (timeLeft <= 0) stopSelectionCountdown();
+                }, 1000);
+            }
+
+            function stopSelectionCountdown() {
+                if (selectionInterval) clearInterval(selectionInterval);
+                document.getElementById('selection-timer').classList.add('hidden');
             }
             if (data.type === "game_start") {
                 if (data.full_movie) {

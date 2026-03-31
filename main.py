@@ -105,6 +105,7 @@ class ConnectionManager:
         self.movie_history: List[str] = []
         
         self.round_timer_task = None 
+        self.selection_timer_task = None
         
         self.game_state = {
             "movie": "",
@@ -148,6 +149,31 @@ class ConnectionManager:
         players = [{"name": name, "score": self.get_player_score(name)} 
                    for name in self.active_connections.keys()]
         return sorted(players, key=lambda x: x['score'], reverse=True)
+    
+    async def start_selection_timer(self):
+        """Starts the 60-second window for a drawer to pick a movie."""
+        if self.selection_timer_task:
+            self.selection_timer_task.cancel()
+
+        async def selection_timeout():
+            try:
+                await asyncio.sleep(60) # 60 second limit
+                if not self.game_state["movie"]:
+                    await self.broadcast({
+                        "type": "announcement",
+                        "message": f"⏰ {self.game_state['drawer_name']} took too long! Switching drawer..."
+                    })
+                    await asyncio.sleep(2)
+                    await self.restart_game() 
+            except asyncio.CancelledError:
+                pass
+
+        self.selection_timer_task = asyncio.create_task(selection_timeout())
+
+    def cancel_selection_timer(self):
+        if self.selection_timer_task:
+            self.selection_timer_task.cancel()
+            self.selection_timer_task = None
 
     async def connect(self, websocket: WebSocket, name: str):
         original_name = name
@@ -258,6 +284,7 @@ class ConnectionManager:
         
         new_drawer_name = random.choice(names)
         self.game_state["drawer_name"] = new_drawer_name
+        await self.start_selection_timer()
         self.game_state["drawer_assigned"] = True
 
         for name, ws in self.active_connections.items():
@@ -362,6 +389,7 @@ async def websocket_endpoint(
         while True:
             data = await websocket.receive_json()
             if data["type"] == "set_movie":
+                manager.cancel_selection_timer()
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["show_vowels"] = data.get("show_vowels", True)
                 manager.movie_history.append(manager.game_state["movie"])
@@ -420,6 +448,7 @@ async def websocket_endpoint(
                         "options": options
                     })
             elif data["type"] == "select_movie":
+                manager.cancel_selection_timer()
                 if name == manager.game_state["drawer_name"]:
                     movie = data["movie"]
                     manager.game_state["movie"] = movie
