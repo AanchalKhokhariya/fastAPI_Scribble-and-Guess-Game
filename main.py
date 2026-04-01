@@ -157,43 +157,51 @@ class ConnectionManager:
         r.delete(f"selection_drawer:{id(self)}")
 
     async def handle_selection_expiry(self):
-        if not self.game_state.get("selection_active"):
-            return
+        # ❌ REMOVE this check (this is the bug)
+        # if not self.game_state.get("selection_active"):
+        #     return
 
+        # If movie already selected, do nothing
         if self.game_state.get("movie"):
             return
 
-        self.game_state["selection_active"] = False
-        self.game_state["selection_end_time"] = None
-        r.delete(f"selection_end_time:{id(self)}")
-        r.delete(f"selection_drawer:{id(self)}")
-
         old_drawer = self.game_state.get("drawer_name")
 
-        # select a new drawer randomly (including the same if only one player exists)
         player_names = list(self.active_connections.keys())
         if not player_names:
             return
 
+        # Select next drawer (avoid same player if possible)
         if len(player_names) > 1 and old_drawer in player_names:
-            candidate_names = [n for n in player_names if n != old_drawer]
-            new_drawer = random.choice(candidate_names)
+            idx = player_names.index(old_drawer)
+            new_drawer = player_names[(idx + 1) % len(player_names)]
         else:
             new_drawer = random.choice(player_names)
 
-        self.game_state["drawer_name"] = new_drawer
-        self.game_state["drawer_assigned"] = True
-        self.game_state["movie"] = ""
-        self.game_state["display_name"] = ""
-        self.game_state["is_round_active"] = False
+        # Reset state
+        self.game_state.update({
+            "drawer_name": new_drawer,
+            "drawer_assigned": True,
+            "movie": "",
+            "display_name": "",
+            "is_round_active": False
+        })
 
+        print(f"[DEBUG] Drawer switched from {old_drawer} → {new_drawer}")
+
+        # Broadcast change
         await self.broadcast({
             "type": "new_drawer",
             "drawer_name": new_drawer,
             "message": f"⏱️ Time's up for {old_drawer}. New drawer: {new_drawer}."
         })
-        await self.broadcast({"type": "player_list", "players": self.get_player_data()})
 
+        await self.broadcast({
+            "type": "player_list",
+            "players": self.get_player_data()
+        })
+
+        # Start fresh 60 sec timer for new drawer
         await self.start_selection_timer()
 
     async def start_selection_timer(self):
