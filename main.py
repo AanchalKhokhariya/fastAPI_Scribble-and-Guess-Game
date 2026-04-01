@@ -187,8 +187,6 @@ class ConnectionManager:
             "is_round_active": False
         })
 
-        print(f"[DEBUG] Drawer switched from {old_drawer} → {new_drawer}")
-
         # Broadcast change
         await self.broadcast({
             "type": "new_drawer",
@@ -214,13 +212,12 @@ class ConnectionManager:
         r.set(f"selection_end_time:{id(self)}", end_timestamp)
         r.set(f"selection_drawer:{id(self)}", self.game_state.get("drawer_name", ""))
 
-        print(f"[DEBUG] start_selection_timer room={id(self)} drawer={self.game_state.get('drawer_name')} duration=60")
-
+        
         async def selection_timer():
             try:
                 while True:
                     remaining = self.get_selection_time_left()
-                    print(f"[DEBUG] selection_timer tick room={id(self)} drawer={self.game_state.get('drawer_name')} remaining={remaining}")
+                    
                     await self.broadcast({
                         "type": "timer_update",
                         "timer_type": "selection",
@@ -232,15 +229,14 @@ class ConnectionManager:
                         break
                     await asyncio.sleep(1)
 
-                print(f"[DEBUG] selection_timer ended room={id(self)} drawer={self.game_state.get('drawer_name')}")
-                self.game_state["selection_active"] = False
+                
                 self.game_state["selection_end_time"] = None
                 r.delete(f"selection_end_time:{id(self)}")
                 r.delete(f"selection_drawer:{id(self)}")
 
                 await self.handle_selection_expiry()
             except asyncio.CancelledError:
-                print(f"[DEBUG] selection_timer canceled room={id(self)} drawer={self.game_state.get('drawer_name')}")
+                
                 pass
 
         self.selection_timer_task = asyncio.create_task(selection_timer())
@@ -293,7 +289,7 @@ class ConnectionManager:
             is_drawer = (name == self.game_state["drawer_name"])
             await self.broadcast({"type": "player_list", "players": self.get_player_data()})
             if is_drawer:
-                print("Drawer disconnected, waiting for reconnect...")
+                
                 return False
 
     async def start_round_timer(self, duration=None):
@@ -313,13 +309,12 @@ class ConnectionManager:
         
         self.game_state["is_round_active"] = True
 
-        print(f"[DEBUG] start_round_timer room={id(self)} duration={duration} drawer={self.game_state.get('drawer_name')}")
+        
 
         async def timer():
             try:
                 while True:
                     remaining = self.get_remaining_time()
-                    print(f"[DEBUG] round_timer tick room={id(self)} drawer={self.game_state.get('drawer_name')} remaining={remaining}")
                     await self.broadcast({
                         "type": "timer_update",
                         "timer_type": "round",
@@ -343,12 +338,19 @@ class ConnectionManager:
                     await asyncio.sleep(5)
                     await self.restart_game()
             except asyncio.CancelledError:
-                print(f"[DEBUG] round_timer canceled room={id(self)} drawer={self.game_state.get('drawer_name')}")
+                
                 pass
 
         self.round_timer_task = asyncio.create_task(timer())
 
     async def restart_game(self):
+        if self.game_state.get("movie"):
+            self.movie_history.append(self.game_state["movie"])
+        await self.broadcast({
+            "type": "history_update",
+            "history": self.movie_history
+        })
+
         self.increment_round() 
         new_round = self.get_round()
         if self.round_timer_task:
@@ -480,12 +482,10 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_json()
-            print(f"[DEBUG] ws data from {name} room={room_id}: {data}")
             if data["type"] == "set_movie":
                 manager.cancel_selection_timer()
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["show_vowels"] = data.get("show_vowels", True)
-                manager.movie_history.append(manager.game_state["movie"])
 
                 manager.game_state["display_name"] = process_movie(
                     manager.game_state["movie"],
@@ -552,7 +552,6 @@ async def websocket_endpoint(
                     movie = data["movie"]
                     manager.game_state["movie"] = movie
                     manager.game_state["show_vowels"] = data.get("show_vowels", True)
-                    manager.movie_history.append(movie)
 
                     manager.game_state["display_name"] = process_movie(
                         movie,

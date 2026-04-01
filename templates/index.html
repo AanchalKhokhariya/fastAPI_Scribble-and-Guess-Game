@@ -241,6 +241,10 @@
         let previousScores = {};
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
+            if (data.type === "history_update") {
+                movieHistory = data.history;
+                renderHistory();
+            }
             if (data.type === "player_list") {
                 data.players.forEach(p => {
                     if (previousScores[p.name] !== undefined && p.score > previousScores[p.name]) {
@@ -356,10 +360,7 @@
             }
             if (data.type === "game_start") {
                 stopSelectionTimer();
-                if (data.full_movie) {
-                    movieHistory.push(data.full_movie);
-                    renderHistory();
-                }
+                
                 currentRound = data.round_number || (currentRound); 
                 document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
