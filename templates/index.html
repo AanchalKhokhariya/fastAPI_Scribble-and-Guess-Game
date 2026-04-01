@@ -182,6 +182,7 @@
         <div id="content">
             <div id="status-bar"><span id="drawer-status">Waiting for game...</span></div>
             <div id="timer-display" class="hidden">⏱️ <span id="time-left">05:00</span></div>
+            <div id="selection-timer-display" class="hidden">🕒 <span id="selection-time-left">01:00</span></div>
             <div id="setup-area">
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
@@ -258,6 +259,43 @@
             if (data.type === "drawer_disconnected") {
                 showToast(`⚠️ Drawer (${data.name}) has left. Selecting new drawer...`);
             }
+            if (data.type === "timer_update" && data.timer_type === "selection") {
+                console.log('[DEBUG] selection timer update', data.time_left, 'drawer', data.drawer_name, 'role', myRole);
+                startSelectionTimer(data.time_left);
+            }
+            if (data.type === "timer_update" && data.timer_type === "round") {
+                console.log('[DEBUG] round timer update', data.time_left, 'drawer', data.drawer_name, 'role', myRole);
+                startTimer(data.time_left);
+            }
+            if (data.type === "new_drawer") {
+                const newDrawer = data.drawer_name;
+                if (newDrawer === myName) {
+                    myRole = "drawer";
+                    document.getElementById('role-display').innerText = "Role: DRAWER";
+                    document.getElementById('drawer-input').classList.remove('hidden');
+                    document.getElementById('controls').classList.remove('hidden');
+                    showToast(`🧩 You are now the drawer. Pick a movie in 60 seconds.`);
+                    startSelectionTimer(60);
+                } else {
+                    myRole = "guesser";
+                    document.getElementById('role-display').innerText = "Role: GUESSER";
+                    document.getElementById('drawer-input').classList.add('hidden');
+                    document.getElementById('controls').classList.add('hidden');
+                    showToast(`🎬 New drawer is ${newDrawer}. Wait for them to choose a movie.`);
+                    stopSelectionTimer();
+                }
+                updateDrawerStatus(newDrawer);
+                document.getElementById('setup-area').classList.remove('hidden');
+                document.getElementById('game-area').classList.add('hidden');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            if (data.type === "movie_options") {
+                showMovieOptions(data.options);
+            }
+            if (data.type === "movie_selected") {
+                showToast(`✅ Movie picked by drawer. Round is starting...`);
+                stopSelectionTimer();
+            }
             function showToast(message) {
                 const container = document.getElementById('toast-container');
                 const toast = document.createElement('div');
@@ -293,6 +331,13 @@
                     document.getElementById('controls').classList.add('hidden');
                 }
                 updateDrawerStatus(data.drawer_name);
+
+                if (data.selection_active && myRole === "drawer") {
+                    startSelectionTimer(data.selection_time_left || 60);
+                } else {
+                    stopSelectionTimer();
+                }
+
                 if (data.history) {
                     data.history.forEach(step => {
                         if (step.isNewPath) ctx.beginPath();
@@ -310,6 +355,7 @@
                 }
             }
             if (data.type === "game_start") {
+                stopSelectionTimer();
                 if (data.full_movie) {
                     movieHistory.push(data.full_movie);
                     renderHistory();
@@ -325,6 +371,7 @@
             }
             if (data.type === "announcement") {
                 stopTimer();
+                stopSelectionTimer();
                 showAnnouncement(data.message, data.reveal);
             }
             if (data.type === "drawing" && myRole === "guesser") {
@@ -349,12 +396,14 @@
             });
         }
         function startTimer(seconds) {
+            console.log('[DEBUG] startTimer called with', seconds);
             stopTimer();
             timeLeft = seconds;
             document.getElementById('timer-display').classList.remove('hidden');
             updateTimerDisplay();
             countdownInterval = setInterval(() => {
                 timeLeft--;
+                console.log('[DEBUG] startTimer tick', timeLeft);
                 if (timeLeft <= 0) {
                     stopTimer();
                 }
@@ -365,6 +414,44 @@
             if (countdownInterval) clearInterval(countdownInterval);
             document.getElementById('timer-display').classList.add('hidden');
         }
+        let selectionInterval = null;
+        let selectionTimeLeft = 0;
+
+        function startSelectionTimer(seconds) {
+            console.log('[DEBUG] startSelectionTimer called with', seconds);
+            if (selectionInterval) clearInterval(selectionInterval);
+            selectionTimeLeft = seconds;
+            if (selectionTimeLeft <= 0) {
+                stopSelectionTimer();
+                return;
+            }
+            document.getElementById('selection-timer-display').classList.remove('hidden');
+            updateSelectionTimerDisplay();
+            selectionInterval = setInterval(() => {
+                selectionTimeLeft--;
+                console.log('[DEBUG] startSelectionTimer tick', selectionTimeLeft);
+                if (selectionTimeLeft <= 0) {
+                    stopSelectionTimer();
+                }
+                updateSelectionTimerDisplay();
+            }, 1000);
+        }
+
+        function stopSelectionTimer() {
+            if (selectionInterval) clearInterval(selectionInterval);
+            document.getElementById('selection-timer-display').classList.add('hidden');
+        }
+
+        function updateSelectionTimerDisplay() {
+            const mins = Math.floor(selectionTimeLeft / 60);
+            const secs = selectionTimeLeft % 60;
+            const timerSpan = document.getElementById('selection-time-left');
+            const timerDiv = document.getElementById('selection-timer-display');
+            timerSpan.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            if (selectionTimeLeft <= 30) timerDiv.classList.add('timer-low');
+            else timerDiv.classList.remove('timer-low');
+        }
+
         function updateTimerDisplay() {
             const mins = Math.floor(timeLeft / 60);
             const secs = timeLeft % 60;

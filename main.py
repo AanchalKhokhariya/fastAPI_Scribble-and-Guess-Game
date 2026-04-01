@@ -96,14 +96,18 @@ class ConnectionManager:
         self.round_duration = duration_mins * 60
         self.movie_history: List[str] = []
         
-        self.round_timer_task = None 
-        
+        self.round_timer_task = None
+        self.selection_timer_task = None
+
         self.game_state = {
             "movie": "",
             "display_name": "",
             "drawer_assigned": False,
             "drawer_name": None,
             "is_round_active": False,
+            "is_selecting": False,
+            "selection_active": False,
+            "selection_end_time": None,
             "winner_announcement": None,
             "revealed_movie": None,
             "show_vowels": True   
@@ -130,11 +134,108 @@ class ConnectionManager:
 
     def get_remaining_time(self):
         """Calculates remaining seconds based on the end_time stored in Redis"""
-        end_time = r.get("round_end_time")
+        end_time = r.get(f"round_end_time:{id(self)}") or r.get("round_end_time")
         if end_time:
             remaining = int(float(end_time) - time.time())
             return max(0, remaining)
         return 0
+
+    def get_selection_time_left(self):
+        selection_end = r.get(f"selection_end_time:{id(self)}")
+        if selection_end:
+            remaining = int(float(selection_end) - time.time())
+            return max(0, remaining)
+        return 0
+
+    def cancel_selection_timer(self):
+        if self.selection_timer_task:
+            self.selection_timer_task.cancel()
+            self.selection_timer_task = None
+        self.game_state["selection_active"] = False
+        self.game_state["selection_end_time"] = None
+        r.delete(f"selection_end_time:{id(self)}")
+        r.delete(f"selection_drawer:{id(self)}")
+
+    async def handle_selection_expiry(self):
+        if not self.game_state.get("selection_active"):
+            return
+
+        if self.game_state.get("movie"):
+            return
+
+        self.game_state["selection_active"] = False
+        self.game_state["selection_end_time"] = None
+        r.delete(f"selection_end_time:{id(self)}")
+        r.delete(f"selection_drawer:{id(self)}")
+
+        old_drawer = self.game_state.get("drawer_name")
+
+        # select a new drawer randomly (including the same if only one player exists)
+        player_names = list(self.active_connections.keys())
+        if not player_names:
+            return
+
+        if len(player_names) > 1 and old_drawer in player_names:
+            candidate_names = [n for n in player_names if n != old_drawer]
+            new_drawer = random.choice(candidate_names)
+        else:
+            new_drawer = random.choice(player_names)
+
+        self.game_state["drawer_name"] = new_drawer
+        self.game_state["drawer_assigned"] = True
+        self.game_state["movie"] = ""
+        self.game_state["display_name"] = ""
+        self.game_state["is_round_active"] = False
+
+        await self.broadcast({
+            "type": "new_drawer",
+            "drawer_name": new_drawer,
+            "message": f"⏱️ Time's up for {old_drawer}. New drawer: {new_drawer}."
+        })
+        await self.broadcast({"type": "player_list", "players": self.get_player_data()})
+
+        await self.start_selection_timer()
+
+    async def start_selection_timer(self):
+        if self.selection_timer_task:
+            self.selection_timer_task.cancel()
+
+        self.game_state["selection_active"] = True
+        end_timestamp = time.time() + 60
+        self.game_state["selection_end_time"] = end_timestamp
+        r.set(f"selection_end_time:{id(self)}", end_timestamp)
+        r.set(f"selection_drawer:{id(self)}", self.game_state.get("drawer_name", ""))
+
+        print(f"[DEBUG] start_selection_timer room={id(self)} drawer={self.game_state.get('drawer_name')} duration=60")
+
+        async def selection_timer():
+            try:
+                while True:
+                    remaining = self.get_selection_time_left()
+                    print(f"[DEBUG] selection_timer tick room={id(self)} drawer={self.game_state.get('drawer_name')} remaining={remaining}")
+                    await self.broadcast({
+                        "type": "timer_update",
+                        "timer_type": "selection",
+                        "time_left": remaining,
+                        "drawer_name": self.game_state.get("drawer_name")
+                    })
+
+                    if remaining <= 0:
+                        break
+                    await asyncio.sleep(1)
+
+                print(f"[DEBUG] selection_timer ended room={id(self)} drawer={self.game_state.get('drawer_name')}")
+                self.game_state["selection_active"] = False
+                self.game_state["selection_end_time"] = None
+                r.delete(f"selection_end_time:{id(self)}")
+                r.delete(f"selection_drawer:{id(self)}")
+
+                await self.handle_selection_expiry()
+            except asyncio.CancelledError:
+                print(f"[DEBUG] selection_timer canceled room={id(self)} drawer={self.game_state.get('drawer_name')}")
+                pass
+
+        self.selection_timer_task = asyncio.create_task(selection_timer())
 
     def get_player_data(self):
         players = [{"name": name, "score": self.get_player_score(name)} 
@@ -167,8 +268,10 @@ class ConnectionManager:
         elif not self.game_state["drawer_assigned"]:
             self.game_state["drawer_assigned"] = True
             self.game_state["drawer_name"] = name
+            self.game_state["is_selecting"] = True
             role = "drawer"
-                
+            await self.start_selection_timer()
+
         await self.broadcast({"type": "player_list", "players": self.get_player_data()})
         return role
 
@@ -188,6 +291,9 @@ class ConnectionManager:
     async def start_round_timer(self, duration=None):
         if duration is None:
             duration = self.round_duration
+
+        # cancel any selection timer once the round begins
+        self.cancel_selection_timer()
         
         if self.round_timer_task:
             self.round_timer_task.cancel()
@@ -195,18 +301,28 @@ class ConnectionManager:
         end_timestamp = time.time() + duration
 
         r.set(f"round_end_time:{id(self)}", end_timestamp)
-        
-        if self.round_timer_task:
-            self.round_timer_task.cancel()
-        
-        end_timestamp = time.time() + duration
         r.set("round_end_time", end_timestamp)
         
-        self.game_state["is_round_active"] = True 
+        self.game_state["is_round_active"] = True
+
+        print(f"[DEBUG] start_round_timer room={id(self)} duration={duration} drawer={self.game_state.get('drawer_name')}")
 
         async def timer():
             try:
-                await asyncio.sleep(duration)  
+                while True:
+                    remaining = self.get_remaining_time()
+                    print(f"[DEBUG] round_timer tick room={id(self)} drawer={self.game_state.get('drawer_name')} remaining={remaining}")
+                    await self.broadcast({
+                        "type": "timer_update",
+                        "timer_type": "round",
+                        "time_left": remaining,
+                        "drawer_name": self.game_state.get("drawer_name")
+                    })
+
+                    if remaining <= 0:
+                        break
+                    await asyncio.sleep(1)
+
                 if self.game_state["is_round_active"]:
                     self.game_state["is_round_active"] = False
                     self.game_state["winner_announcement"] = "⏰ Time's up!"
@@ -219,7 +335,9 @@ class ConnectionManager:
                     await asyncio.sleep(5)
                     await self.restart_game()
             except asyncio.CancelledError:
+                print(f"[DEBUG] round_timer canceled room={id(self)} drawer={self.game_state.get('drawer_name')}")
                 pass
+
         self.round_timer_task = asyncio.create_task(timer())
 
     async def restart_game(self):
@@ -247,6 +365,8 @@ class ConnectionManager:
         self.game_state["drawer_name"] = new_drawer_name
         self.game_state["drawer_assigned"] = True
 
+        await self.start_selection_timer()
+
         for name, ws in self.active_connections.items():
             role = "drawer" if name == new_drawer_name else "guesser"
             await ws.send_json({
@@ -254,7 +374,9 @@ class ConnectionManager:
                 "role": role,
                 "round_number": new_round, 
                 "movie_set": False,
-                "drawer_name": new_drawer_name
+                "drawer_name": new_drawer_name,
+                "selection_active": True,
+                "selection_time_left": self.get_selection_time_left()
             })
 
     async def broadcast(self, message: dict):
@@ -271,14 +393,14 @@ class ConnectionManager:
                 del self.ws_to_name[id(ws)]
             
             if name == self.game_state["drawer_name"]:
-                
+                self.cancel_selection_timer()
+
                 await self.broadcast({
                     "type": "drawer_disconnected", 
                     "name": name
                 })
                 
                 if self.active_connections:
-                    
                     await self.restart_game()
                 else:
                     self.game_state["drawer_assigned"] = False
@@ -338,6 +460,8 @@ async def websocket_endpoint(
         "display": manager.game_state["display_name"], 
         "full_movie": manager.game_state["movie"],
         "drawer_name": manager.game_state["drawer_name"], 
+        "selection_active": manager.game_state.get("selection_active", False),
+        "selection_time_left": manager.get_selection_time_left(),
         "history": manager.draw_history,
         "winner_msg": manager.game_state["winner_announcement"], 
         "revealed": manager.game_state["revealed_movie"],
@@ -348,7 +472,9 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_json()
+            print(f"[DEBUG] ws data from {name} room={room_id}: {data}")
             if data["type"] == "set_movie":
+                manager.cancel_selection_timer()
                 manager.game_state["movie"] = data["movie"].upper()
                 manager.game_state["show_vowels"] = data.get("show_vowels", True)
                 manager.movie_history.append(manager.game_state["movie"])
@@ -357,9 +483,15 @@ async def websocket_endpoint(
                     manager.game_state["movie"],
                     manager.game_state["show_vowels"]
                 )
-                
+
                 await manager.start_round_timer(duration=manager.round_duration)
-                
+
+                await manager.broadcast({
+                    "type": "movie_selected",
+                    "drawer_name": manager.game_state["drawer_name"],
+                    "full_movie": manager.game_state["movie"]
+                })
+
                 await manager.broadcast({
                     "type": "game_start", 
                     "display": manager.game_state["display_name"],
@@ -408,17 +540,25 @@ async def websocket_endpoint(
                     })
             elif data["type"] == "select_movie":
                 if name == manager.game_state["drawer_name"]:
+                    manager.cancel_selection_timer()
                     movie = data["movie"]
                     manager.game_state["movie"] = movie
                     manager.game_state["show_vowels"] = data.get("show_vowels", True)
                     manager.movie_history.append(movie)
-                    manager.game_state["movie"] = movie
 
                     manager.game_state["display_name"] = process_movie(
                         movie,
                         manager.game_state["show_vowels"]
                     )
+
                     await manager.start_round_timer(duration=manager.round_duration)
+
+                    await manager.broadcast({
+                        "type": "movie_selected",
+                        "drawer_name": manager.game_state["drawer_name"],
+                        "full_movie": manager.game_state["movie"]
+                    })
+
                     await manager.broadcast({
                         "type": "game_start",
                         "display": manager.game_state["display_name"],
