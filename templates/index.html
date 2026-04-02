@@ -13,145 +13,344 @@
             --text-main: #f8fafc;
             --text-dim: #94a3b8;
         }
-        body { 
-            font-family: 'Inter', system-ui, sans-serif; 
-            text-align: center; 
-            background: var(--bg); 
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+            background: var(--bg);
             color: var(--text-main);
-            margin: 0; padding: 0; 
-            display: flex; flex-direction: column; 
-            height: 100vh; 
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
             overflow: hidden;
         }
-        header { 
-            padding: 10px 20px; 
-            background: var(--sidebar-bg); 
+
+        header {
+            padding: 12px 16px;
+            background: var(--sidebar-bg);
             border-bottom: 1px solid rgba(255,255,255,0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
-        header h1 { font-size: 1.5rem; margin: 0; }
-        .main-container { display: flex; flex: 1; overflow: hidden; }
-        #sidebar { 
-            width: 280px; 
-            background: var(--sidebar-bg); 
-            border-right: 1px solid rgba(255,255,255,0.1); 
-            padding: 20px; 
-            text-align: left; 
-            overflow-y: auto; 
+
+        header h1 {
+            font-size: 1.4rem;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .sidebar-title { 
-            font-size: 14px; 
-            font-weight: 800; 
-            margin-bottom: 20px; 
-            color: var(--text-dim); 
-            text-transform: uppercase; 
-            letter-spacing: 2px; 
+
+        #header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        .player-item { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 12px 16px; margin-bottom: 10px; 
-            background: rgba(255,255,255,0.03); 
-            border-radius: 12px; transition: 0.2s;
+
+        #sidebar-toggle {
+            display: none;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
         }
-        .player-name { font-weight: 600; font-size: 15px; }
-        .player-score { 
-            background: var(--accent); color: white; 
-            padding: 4px 10px; border-radius: 8px; 
-            font-size: 12px; font-weight: bold;
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
-        .is-me { border: 2px solid var(--draw-blue); background: rgba(59, 130, 246, 0.1); }
-        #content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; position: relative; }
-        #status-bar { font-size: 18px; margin-bottom: 15px; font-weight: 500; }
-        #timer-display { 
-            font-size: 20px; color: var(--accent); font-weight: 700; 
-            margin-bottom: 15px; background: var(--accent-soft);
-            padding: 8px 20px; border-radius: 30px; border: 1px solid var(--accent);
+
+        #sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            padding: 16px;
+            text-align: left;
+            overflow-y: auto;
+            min-height: 0;
+            transition: transform 0.25s ease;
         }
-        .timer-low { background: var(--accent); color: white !important; animation: blink 0.8s infinite; }
-        #canvas { 
-            background: #ffffff; cursor: crosshair; 
-            border-radius: 16px; 
+
+        #sidebar.open-mobile {
+            transform: translateX(0);
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            transition: background 0.2s;
+            word-break: break-word;
+        }
+
+        .player-name { font-weight: 600; font-size: 0.95rem; }
+
+        .player-score {
+            background: var(--accent);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .is-me { border: 2px solid var(--draw-blue); background: rgba(59, 130, 246, 0.12); }
+
+        #content {
+            flex: 1;
+            padding: 16px;
+            min-width: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #status-bar { font-size: 1rem; margin-bottom: 8px; font-weight: 500; }
+
+        #timer-display, #selection-timer-display {
+            font-size: 1rem;
+            color: var(--accent);
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: var(--accent-soft);
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            white-space: nowrap;
+        }
+
+        #canvas {
+            background: #ffffff;
+            cursor: crosshair;
+            border-radius: 16px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 100%; height: auto;
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            touch-action: none;
         }
-        .toolbar { 
-            margin-bottom: 15px; background: var(--sidebar-bg);
-            padding: 10px 20px; border-radius: 12px;
-            display: flex; gap: 10px; align-items: center;
-            border: 1px solid rgba(255,255,255,0.1);
+
+        .toolbar {
+            width: 100%;
+            margin-bottom: 12px;
+            background: var(--sidebar-bg);
+            padding: 12px;
+            border-radius: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            border: 1px solid rgba(255,255,255,0.15);
+            flex-wrap: wrap;
         }
-        .btn { 
-            padding: 8px 16px; cursor: pointer; border: 1px solid #334155; 
-            border-radius: 8px; background: #0f172a; color: white;
-            font-weight: 600; transition: 0.2s; 
+
+        .btn, .btn-restart, #sidebar-toggle {
+            padding: 10px 14px;
+            cursor: pointer;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #0f172a;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+            min-height: 42px;
+            touch-action: manipulation;
         }
-        .btn:hover { background: #334155; }
+
+        .btn:hover, .btn-restart:hover {
+            background: #334155;
+        }
+
         .active-tool { background: var(--draw-blue); border-color: var(--draw-blue); }
-        .box-container { margin: 20px auto; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
-        .letter-input { 
-            width: 45px; height: 55px; font-size: 28px; text-align: center; 
-            border: 2px solid #334155; border-radius: 10px; 
-            background: #1e293b; color: white; text-transform: uppercase; font-weight: 800; 
-        }
-        .letter-input:focus { border-color: var(--draw-blue); outline: none; }
-        .letter-input:disabled { background: #0f172a; border-color: transparent; color: var(--text-dim); }
-        #congrats-area { 
-            margin-bottom: 20px; padding: 20px; 
-            background: rgba(34, 197, 94, 0.15); 
-            border-radius: 16px; width: 90%; border: 1px solid var(--success);
-            animation: slideDown 0.5s ease-out;
-        }
-        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        #congrats-text { font-size: 24px; color: var(--success); font-weight: 800; }
-        .btn-restart { 
-            background: var(--success); color: white; border: none; 
-            font-size: 16px; font-weight: bold; padding: 10px 25px; 
-            cursor: pointer; border-radius: 8px; margin-top: 15px; 
-        }
-        #colorPicker { width: 40px; height: 40px; border: none; border-radius: 8px; overflow: hidden; cursor: pointer; }
-        .hidden { display: none !important; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .space {
-            width: 40px; 
-            height: 55px;
-            display: inline-block;
-        }
+
         .box-container {
+            margin: 16px auto;
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
             gap: 8px;
             max-width: 90%;
-            margin: 20px auto;
         }
+
+        .letter-input {
+            width: 42px;
+            height: 52px;
+            font-size: 24px;
+            text-align: center;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            background: #1e293b;
+            color: white;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .letter-input:focus { border-color: var(--draw-blue); outline: none; }
+
+        .letter-input:disabled { background: #0f172a; border-color: transparent; color: var(--text-dim); }
+
+        #congrats-area {
+            margin-bottom: 16px;
+            padding: 16px;
+            background: rgba(34, 197, 94, 0.15);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 950px;
+            border: 1px solid var(--success);
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        #congrats-text { font-size: 1.2rem; color: var(--success); font-weight: 800; }
+
+        .btn-restart {
+            background: var(--success);
+            color: white;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            padding: 11px 18px;
+            cursor: pointer;
+            border-radius: 10px;
+            margin-top: 12px;
+            min-width: 140px;
+        }
+
+        #colorPicker {
+            width: 42px;
+            height: 42px;
+            border: none;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .hidden { display: none !important; }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .space {
+            width: 35px;
+            height: 52px;
+            display: inline-block;
+        }
+
         #toast-container {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
+            bottom: 14px;
+            left: 14px;
+            right: 14px;
             z-index: 1000;
+            pointer-events: none;
         }
+
         .toast {
-            background: #ef4444; 
+            background: #ef4444;
             color: white;
-            padding: 12px 20px;
+            padding: 12px 16px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             margin-top: 10px;
             font-weight: 600;
             animation: slideIn 0.3s ease-out;
+            pointer-events: auto;
         }
-        @keyframes slideIn {
-            from { transform: translateX(-100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
+
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
         #history-modal {
             transition: transform 0.3s ease;
             transform: translateX(100%);
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            background: #1e293b;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 18px;
+            overflow-y: auto;
+            z-index: 9999;
+            box-sizing: border-box;
         }
-        #history-modal:not(.hidden) {
-            transform: translateX(0);
+
+        #history-modal:not(.hidden) { transform: translateX(0); }
+
+        #history-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 9998;
+        }
+
+        @media (max-width: 1024px) {
+            .main-container { flex-direction: column; }
+            #sidebar {
+                width: 100%;
+                border-right: none;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                max-height: 240px;
+            }
+            #content { padding: 12px; }
+            #canvas { max-height: 45vh; }
+            .toolbar { gap: 6px; padding: 10px; }
+            .btn, .btn-restart { font-size: 0.92rem; }
+            header h1 { font-size: 1.2rem; }
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 10px; }
+            #sidebar-toggle { display: inline-flex; }
+            #sidebar { position: fixed; left: 0; top: 54px; width: 72%; max-width: 280px; height: calc(100% - 54px); transform: translateX(-105%); z-index: 200; }
+            #sidebar.open-mobile { transform: translateX(0); }
+            #sidebar.hidden-mobile { transform: translateX(-105%); }
+            .main-container { padding-top: 0; }
+            #content { padding: 10px; }
+            #canvas { max-height: 35vh; }
+            .box-container { gap: 6px; }
+            .letter-input { width: 38px; height: 50px; font-size: 22px; }
+            .space { width: 32px; height: 50px; }
+            #history-modal { width: 100%; }
+            #history-modal:not(.hidden) { transform: translateX(0); }
+            #timer-display, #selection-timer-display { font-size: 0.95rem; padding: 6px 12px; }
+            #header-right { width: 100%; justify-content: flex-end; }
         }
     </style>
 </head>
@@ -159,14 +358,15 @@
     <div id="toast-container"></div>
     <header>
         <h1>🎬 Movie Guess</h1>
-        <div style="display: flex; align-items: center; gap: 20px;">
-            <div style="text-align: right;">
+        <div id="header-right">
+            <button id="sidebar-toggle" onclick="toggleSidebar()">👥 Players</button>
+            <div style="text-align: right; min-width: 165px;">
                 <p id="round-display" style="margin: 0; font-weight: bold; color: var(--success);">ROUND: 1</p>
                 <p id="room-display" style="margin: 0; font-weight: bold; color: var(--accent);">ROOM: {{ room_code }}</p>
                 <p id="player-welcome" style="margin: 0; font-size: 0.8rem; color: var(--text-dim);">{{ username }}</p>
             </div>
-            <button onclick="toggleHistory()" class="btn" style="padding:5px 10px;">📜</button>
-            <button onclick="leaveGame()" class="btn" style="background: #ef4444; border: none; padding: 5px 15px;">Leave Room</button>
+            <button onclick="toggleHistory()" class="btn">📜 History</button>
+            <button onclick="leaveGame()" class="btn" style="background: #ef4444; border: none;">Leave</button>
         </div>
     </header>
     <div id="disconnect-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); color: white; z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -177,6 +377,9 @@
     <div class="main-container">
         <div id="sidebar">
             <div class="sidebar-title">Leaderboard</div>
+            <div class="sidebar-status" style="margin-bottom: 12px; color: var(--text-main); font-weight: 600; font-size: 0.95rem;">
+                Drawer: <span id="sidebar-drawer">Waiting...</span>
+            </div>
             <div id="player-list"></div>
         </div>
         <div id="content">
@@ -479,7 +682,9 @@
             const statusEl = document.getElementById('drawer-status');
             if (!name) return;
             statusEl.dataset.drawerName = name;
-            statusEl.innerText = ""; 
+            statusEl.innerText = "Drawer: " + name;
+            const sideDrawer = document.getElementById('sidebar-drawer');
+            if (sideDrawer) sideDrawer.innerText = name;
             if (window.lastPlayerData) {
                 updatePlayerList(window.lastPlayerData);
             }
@@ -575,29 +780,63 @@
             inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
             if (guessArr.join("") === targetMovie) ws.send(JSON.stringify({type: "won", name: myName}));
         }
-        canvas.onmousedown = (e) => { 
-            if(myRole === "drawer") { 
-                drawing = true; ctx.beginPath(); 
-                let rect = canvas.getBoundingClientRect();
-                let x = e.clientX - rect.left, y = e.clientY - rect.top;
-                let color = document.getElementById('colorPicker').value;
-                ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: true, color: color }));
-                draw(x, y, currentTool, color);
-            } 
-        };
-        canvas.onmouseup = () => { drawing = false; };
-        canvas.onmousemove = (e) => {
-            if (!drawing || myRole !== "drawer") return;
+        function getCanvasCoords(clientX, clientY) {
             let rect = canvas.getBoundingClientRect();
-            let x = e.clientX - rect.left, y = e.clientY - rect.top;
-            let color = document.getElementById('colorPicker').value;
-            draw(x, y, currentTool, color);
-            ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: false, color: color }));
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function handleDrawStart(coords) {
+            if (myRole !== "drawer") return;
+            drawing = true;
+            ctx.beginPath();
+            const color = document.getElementById('colorPicker').value;
+            ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: true, color: color }));
+            draw(coords.x, coords.y, currentTool, color);
+        }
+
+        function handleDrawMove(coords) {
+            if (!drawing || myRole !== "drawer") return;
+            const color = document.getElementById('colorPicker').value;
+            draw(coords.x, coords.y, currentTool, color);
+            ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: false, color: color }));
+        }
+
+        canvas.onmousedown = (e) => {
+            e.preventDefault();
+            handleDrawStart(getCanvasCoords(e.clientX, e.clientY));
         };
+
+        canvas.onmouseup = () => { drawing = false; };
+        canvas.onmouseleave = () => { drawing = false; };
+
+        canvas.onmousemove = (e) => {
+            e.preventDefault();
+            handleDrawMove(getCanvasCoords(e.clientX, e.clientY));
+        };
+
+        canvas.ontouchstart = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (!touch) return;
+            handleDrawStart(getCanvasCoords(touch.clientX, touch.clientY));
+        };
+
+        canvas.ontouchmove = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (!touch) return;
+            handleDrawMove(getCanvasCoords(touch.clientX, touch.clientY));
+        };
+
+        canvas.ontouchend = () => { drawing = false; };
+
         function draw(x, y, tool, color) {
-            ctx.lineWidth = (tool === 'erase') ? 25 : 4; ctx.lineCap = "round";
+            ctx.lineWidth = (tool === 'erase') ? 25 : 4;
+            ctx.lineCap = "round";
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : color;
-            ctx.lineTo(x, y); ctx.stroke(); ctx.moveTo(x, y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.moveTo(x, y);
         }
         function setTool(t) {
             currentTool = t;
@@ -659,6 +898,13 @@
                 container.appendChild(div);
             });
         }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open-mobile');
+            sidebar.classList.toggle('hidden-mobile');
+        }
+
         function toggleHistory() {
             const modal = document.getElementById("history-modal");
             const overlay = document.getElementById("history-overlay");
