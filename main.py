@@ -46,8 +46,8 @@ async def join(
         if room_code not in rooms:
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
-        if name in rooms[room_code].active_connections:
-            return RedirectResponse(url=f"/?error=name_taken", status_code=303)
+        existing_names = rooms[room_code].active_connections.keys()
+        name = get_unique_name(name, existing_names)
         
     response = RedirectResponse(url="/game", status_code=303)
     response.set_cookie(key="username", value=name)
@@ -247,19 +247,19 @@ class ConnectionManager:
         return sorted(players, key=lambda x: x['score'], reverse=True)
 
     async def connect(self, websocket: WebSocket, name: str):
-        if name in self.active_connections:
-            await websocket.accept()
-            await websocket.send_json({
-                "type": "error",
-                "message": "Username already taken. Please choose another name."
-            })
-            await websocket.close()
-            return None
+        original_name = name
+        name = get_unique_name(name, self.active_connections.keys())
 
         await websocket.accept()
         ws_id = id(websocket)
         self.active_connections[name] = websocket
         self.ws_to_name[ws_id] = name
+
+        if name != original_name:
+            await websocket.send_json({
+                "type": "name_updated",
+                "new_name": name
+            })
         
         if r.get(f"score:{name}") is None:
             r.set(f"score:{name}", 0)
@@ -427,6 +427,16 @@ def process_movie(movie: str, show_vowels: bool = True):
         return "".join(["_" if char.isalnum() else char for char in movie])
 
 rooms: Dict[str, ConnectionManager] = {}
+
+def get_unique_name(name, existing_names):
+    if name not in existing_names:
+        return name
+    
+    count = 1
+    while f"{name}({count})" in existing_names:
+        count += 1
+    
+    return f"{name}({count})"
 
 @app.get("/")
 async def get(request: Request):
