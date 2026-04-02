@@ -781,10 +781,16 @@
             if (guessArr.join("") === targetMovie) ws.send(JSON.stringify({type: "won", name: myName}));
         }
         function getCanvasCoords(clientX, clientY) {
-            let rect = canvas.getBoundingClientRect();
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        }
+            const rect = canvas.getBoundingClientRect();
 
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
         function handleDrawStart(coords) {
             if (myRole !== "drawer") return;
             drawing = true;
