@@ -22,46 +22,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+class GameRoom:
+    def __init__(self, room_id: str, host: str, room_type: str, max_players: int = 6):
+        self.room_id = room_id
+        self.host = host
+        self.room_type = room_type  # "private" or "public"
+        self.max_players = max_players
+        self.manager = ConnectionManager()
+        self.players: List[str] = []
+        self.game_started = False
 
-rooms: Dict[str, ConnectionManager] = {}
+    def is_full(self):
+        return len(self.players) >= self.max_players
+
+    def add_player(self, name: str):
+        if not self.is_full():
+            self.players.append(name)
+
+    def remove_player(self, name: str):
+        if name in self.players:
+            self.players.remove(name)
+
+    def should_start_game(self):
+        return self.room_type == "public" and self.is_full()
+
+
+public_rooms: Dict[str, GameRoom] = {}
+lobby_connections: List[WebSocket] = []
 
 @app.post("/join")
 async def join(
-    name: str = Form(...), 
-    room_code: str = Form(None), 
+    name: str = Form(...),
+    room_code: str = Form(None),
     action: str = Form(...),
-    duration: int = Form(5) 
+    room_type: str = Form("private"),  
+    max_players: int = Form(6)         
 ):
     if action == "create":
+        max_players = max(2, min(6, max_players))
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        # Ensure we use the 'duration' from the form here
-        rooms[room_code] = ConnectionManager(duration_mins=duration)
-    
+
+        room = GameRoom(
+            room_id=room_code,
+            host=name,
+            room_type=room_type,
+            max_players=max_players
+        )
+
+        room.add_player(name)
+        rooms[room_code] = room
+
+        if room_type == "public":
+            public_rooms[room_code] = room
+
     elif action == "join":
         room_code = room_code.upper().strip()
 
         if room_code not in rooms:
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
-        existing_names = rooms[room_code].active_connections.keys()
-        name = get_unique_name(name, existing_names)
-        
+        room = rooms[room_code]
+
+        if room.is_full():
+            return RedirectResponse(url=f"/?error=full&code={room_code}", status_code=303)
+
+        name = get_unique_name(name, room.players)
+        room.add_player(name)
+
+        await broadcast_lobby()
+
     response = RedirectResponse(url="/game", status_code=303)
-    response.set_cookie(key="username", value=name)
-    response.set_cookie(key="room_id", value=room_code) 
+    response.set_cookie("username", name)
+    response.set_cookie("room_id", room_code)
     return response
 
 @app.get("/leave")
 async def leave(username: str = Cookie(None), room_id: str = Cookie(None)):
     if room_id in rooms and username:
-        manager = rooms[room_id]
+        room = rooms[room_id]
+        manager = room.manager
         await manager.handle_voluntary_leave(username)
         
         if not manager.active_connections:
             del rooms[room_id]
+            if room_id in public_rooms:
+                del public_rooms[room_id]
 
     response = RedirectResponse(url="/", status_code=303)
     response.delete_cookie("room_id")
@@ -87,6 +132,8 @@ MOVIE_POOL_DICT = load_movies_by_section()
 
 def get_random_movie():
     return random.choice(MOVIE_POOL_DICT)
+
+
 
 class ConnectionManager:
     def __init__(self, duration_mins=5): 
@@ -157,11 +204,7 @@ class ConnectionManager:
         r.delete(f"selection_drawer:{id(self)}")
 
     async def handle_selection_expiry(self):
-        # ❌ REMOVE this check (this is the bug)
-        # if not self.game_state.get("selection_active"):
-        #     return
-
-        # If movie already selected, do nothing
+        
         if self.game_state.get("movie"):
             return
 
@@ -171,14 +214,14 @@ class ConnectionManager:
         if not player_names:
             return
 
-        # Select next drawer (avoid same player if possible)
+        
         if len(player_names) > 1 and old_drawer in player_names:
             idx = player_names.index(old_drawer)
             new_drawer = player_names[(idx + 1) % len(player_names)]
         else:
             new_drawer = random.choice(player_names)
 
-        # Reset state
+        
         self.game_state.update({
             "drawer_name": new_drawer,
             "drawer_assigned": True,
@@ -187,7 +230,7 @@ class ConnectionManager:
             "is_round_active": False
         })
 
-        # Broadcast change
+        
         await self.broadcast({
             "type": "new_drawer",
             "drawer_name": new_drawer,
@@ -199,7 +242,7 @@ class ConnectionManager:
             "players": self.get_player_data()
         })
 
-        # Start fresh 60 sec timer for new drawer
+        
         await self.start_selection_timer()
 
     async def start_selection_timer(self):
@@ -296,7 +339,7 @@ class ConnectionManager:
         if duration is None:
             duration = self.round_duration
 
-        # cancel any selection timer once the round begins
+        
         self.cancel_selection_timer()
         
         if self.round_timer_task:
@@ -426,7 +469,7 @@ def process_movie(movie: str, show_vowels: bool = True):
     else:
         return "".join(["_" if char.isalnum() else char for char in movie])
 
-rooms: Dict[str, ConnectionManager] = {}
+rooms: Dict[str, GameRoom] = {}
 
 def get_unique_name(name, existing_names):
     if name not in existing_names:
@@ -453,6 +496,40 @@ async def get_game(request: Request, room_id: str = Cookie(None)):
         "room_code": room_id
     })
 
+@app.websocket("/ws/lobby")
+async def lobby_ws(websocket: WebSocket):
+    await websocket.accept()
+    lobby_connections.append(websocket)
+
+    await send_lobby_data(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except:
+        lobby_connections.remove(websocket)
+
+async def send_lobby_data(ws):
+    rooms_data = []
+
+    for room in public_rooms.values():
+        rooms_data.append({
+            "room_id": room.room_id,
+            "players": len(room.players),
+            "max_players": room.max_players
+        })
+
+    await ws.send_json({
+        "type": "lobby_list",
+        "rooms": rooms_data
+    })
+async def broadcast_lobby():
+    for ws in lobby_connections:
+        try:
+            await send_lobby_data(ws)
+        except:
+            continue
+
 @app.websocket("/ws") 
 async def websocket_endpoint(
     websocket: WebSocket, 
@@ -463,8 +540,14 @@ async def websocket_endpoint(
         await websocket.close()
         return
 
-    manager = rooms[room_id]
+    room = rooms[room_id]
+    manager = room.manager
     role = await manager.connect(websocket, username)
+
+    if room.should_start_game() and not room.game_started:
+        room.game_started = True
+        await manager.restart_game()
+    await broadcast_lobby()
 
     if role is None:
         return  
@@ -587,6 +670,16 @@ async def websocket_endpoint(
         
         name = manager.ws_to_name.get(id(websocket))
         is_drawer = (name == manager.game_state["drawer_name"])
+        room = rooms[room_id]
+        room.remove_player(name)
+
+        if not room.players:
+            # delete empty room
+            del rooms[room_id]
+            if room_id in public_rooms:
+                del public_rooms[room_id]
+
+        await broadcast_lobby()
         
         await manager.disconnect(websocket)
         

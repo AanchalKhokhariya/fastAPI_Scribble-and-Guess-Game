@@ -13,7 +13,6 @@
             --text-main: #f8fafc;
             --text-dim: #94a3b8;
         }
-
         html, body {
             margin: 0;
             padding: 0;
@@ -23,7 +22,6 @@
             background: var(--bg);
             color: var(--text-main);
         }
-
         body {
             font-family: 'Inter', system-ui, sans-serif;
             display: flex;
@@ -31,7 +29,6 @@
             min-height: 100vh;
             overflow: hidden;
         }
-
         header {
             padding: 12px 16px;
             background: var(--sidebar-bg);
@@ -45,7 +42,6 @@
             top: 0;
             z-index: 10;
         }
-
         header h1 {
             font-size: 1.4rem;
             margin: 0;
@@ -53,14 +49,12 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-
         #header-right {
             display: flex;
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
         }
-
         #sidebar-toggle {
             display: none;
             border: 1px solid #334155;
@@ -70,14 +64,12 @@
             border-radius: 8px;
             font-size: 0.9rem;
         }
-
         .main-container {
             display: flex;
             flex: 1;
             min-height: 0;
             overflow: hidden;
         }
-
         #sidebar {
             width: 280px;
             background: var(--sidebar-bg);
@@ -88,11 +80,9 @@
             min-height: 0;
             transition: transform 0.25s ease;
         }
-
         #sidebar.open-mobile {
             transform: translateX(0);
         }
-
         .sidebar-title {
             font-size: 12px;
             font-weight: 800;
@@ -101,7 +91,6 @@
             text-transform: uppercase;
             letter-spacing: 1.5px;
         }
-
         .player-item {
             display: flex;
             justify-content: space-between;
@@ -113,9 +102,7 @@
             transition: background 0.2s;
             word-break: break-word;
         }
-
         .player-name { font-weight: 600; font-size: 0.95rem; }
-
         .player-score {
             background: var(--accent);
             color: white;
@@ -124,9 +111,7 @@
             font-size: 0.78rem;
             font-weight: 700;
         }
-
         .is-me { border: 2px solid var(--draw-blue); background: rgba(59, 130, 246, 0.12); }
-
         #content {
             flex: 1;
             padding: 16px;
@@ -138,9 +123,7 @@
             align-items: center;
             gap: 12px;
         }
-
         #status-bar { font-size: 1rem; margin-bottom: 8px; font-weight: 500; }
-
         #timer-display, #selection-timer-display {
             font-size: 1rem;
             color: var(--accent);
@@ -152,7 +135,6 @@
             border: 1px solid var(--accent);
             white-space: nowrap;
         }
-
         #canvas {
             background: #ffffff;
             cursor: crosshair;
@@ -163,7 +145,6 @@
             height: auto;
             touch-action: none;
         }
-
         .toolbar {
             width: 100%;
             margin-bottom: 12px;
@@ -176,7 +157,6 @@
             border: 1px solid rgba(255,255,255,0.15);
             flex-wrap: wrap;
         }
-
         .btn, .btn-restart, #sidebar-toggle {
             padding: 10px 14px;
             cursor: pointer;
@@ -189,13 +169,10 @@
             min-height: 42px;
             touch-action: manipulation;
         }
-
         .btn:hover, .btn-restart:hover {
             background: #334155;
         }
-
         .active-tool { background: var(--draw-blue); border-color: var(--draw-blue); }
-
         .box-container {
             margin: 16px auto;
             display: flex;
@@ -204,7 +181,6 @@
             gap: 8px;
             max-width: 90%;
         }
-
         .letter-input {
             width: 42px;
             height: 52px;
@@ -217,11 +193,8 @@
             text-transform: uppercase;
             font-weight: 800;
         }
-
         .letter-input:focus { border-color: var(--draw-blue); outline: none; }
-
         .letter-input:disabled { background: #0f172a; border-color: transparent; color: var(--text-dim); }
-
         #congrats-area {
             margin-bottom: 16px;
             padding: 16px;
@@ -232,11 +205,8 @@
             border: 1px solid var(--success);
             animation: slideDown 0.3s ease-out;
         }
-
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
         #congrats-text { font-size: 1.2rem; color: var(--success); font-weight: 800; }
-
         .btn-restart {
             background: var(--success);
             color: white;
@@ -249,7 +219,6 @@
             margin-top: 12px;
             min-width: 140px;
         }
-
         #colorPicker {
             width: 42px;
             height: 42px;
@@ -258,17 +227,13 @@
             overflow: hidden;
             cursor: pointer;
         }
-
         .hidden { display: none !important; }
-
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
         .space {
             width: 35px;
             height: 52px;
             display: inline-block;
         }
-
         #toast-container {
             position: fixed;
             bottom: 14px;
@@ -277,7 +242,6 @@
             z-index: 1000;
             pointer-events: none;
         }
-
         .toast {
             background: #ef4444;
             color: white;
@@ -289,9 +253,7 @@
             animation: slideIn 0.3s ease-out;
             pointer-events: auto;
         }
-
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
         #history-modal {
             transition: transform 0.3s ease;
             transform: translateX(100%);
@@ -307,9 +269,7 @@
             z-index: 9999;
             box-sizing: border-box;
         }
-
         #history-modal:not(.hidden) { transform: translateX(0); }
-
         #history-overlay {
             position: fixed;
             top: 0;
@@ -319,7 +279,6 @@
             background: rgba(0,0,0,0.6);
             z-index: 9998;
         }
-
         @media (max-width: 1024px) {
             .main-container { flex-direction: column; }
             #sidebar {
@@ -334,7 +293,6 @@
             .btn, .btn-restart { font-size: 0.92rem; }
             header h1 { font-size: 1.2rem; }
         }
-
         @media (max-width: 768px) {
             header { padding: 10px; }
             #sidebar-toggle { display: inline-flex; }
@@ -457,9 +415,9 @@
                     }
                     previousScores[p.name] = p.score;
                 });
-        window.lastPlayerData = data.players; 
-        updatePlayerList(data.players);
-    }
+                window.lastPlayerData = data.players; 
+                updatePlayerList(data.players);
+            }
             if (data.type === "movie_options") {
                 showMovieOptions(data.options);
             }
@@ -538,13 +496,11 @@
                     document.getElementById('controls').classList.add('hidden');
                 }
                 updateDrawerStatus(data.drawer_name);
-
                 if (data.selection_active && myRole === "drawer") {
                     startSelectionTimer(data.selection_time_left || 60);
                 } else {
                     stopSelectionTimer();
                 }
-
                 if (data.history) {
                     data.history.forEach(step => {
                         if (step.isNewPath) ctx.beginPath();
@@ -563,7 +519,6 @@
             }
             if (data.type === "game_start") {
                 stopSelectionTimer();
-                
                 currentRound = data.round_number || (currentRound); 
                 document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
@@ -620,7 +575,6 @@
         }
         let selectionInterval = null;
         let selectionTimeLeft = 0;
-
         function startSelectionTimer(seconds) {
             console.log('[DEBUG] startSelectionTimer called with', seconds);
             if (selectionInterval) clearInterval(selectionInterval);
@@ -640,12 +594,10 @@
                 updateSelectionTimerDisplay();
             }, 1000);
         }
-
         function stopSelectionTimer() {
             if (selectionInterval) clearInterval(selectionInterval);
             document.getElementById('selection-timer-display').classList.add('hidden');
         }
-
         function updateSelectionTimerDisplay() {
             const mins = Math.floor(selectionTimeLeft / 60);
             const secs = selectionTimeLeft % 60;
@@ -655,7 +607,6 @@
             if (selectionTimeLeft <= 30) timerDiv.classList.add('timer-low');
             else timerDiv.classList.remove('timer-low');
         }
-
         function updateTimerDisplay() {
             const mins = Math.floor(timeLeft / 60);
             const secs = timeLeft % 60;
@@ -782,10 +733,8 @@
         }
         function getCanvasCoords(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-
             return {
                 x: (clientX - rect.left) * scaleX,
                 y: (clientY - rect.top) * scaleY
@@ -799,43 +748,35 @@
             ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: true, color: color }));
             draw(coords.x, coords.y, currentTool, color);
         }
-
         function handleDrawMove(coords) {
             if (!drawing || myRole !== "drawer") return;
             const color = document.getElementById('colorPicker').value;
             draw(coords.x, coords.y, currentTool, color);
             ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: false, color: color }));
         }
-
         canvas.onmousedown = (e) => {
             e.preventDefault();
             handleDrawStart(getCanvasCoords(e.clientX, e.clientY));
         };
-
         canvas.onmouseup = () => { drawing = false; };
         canvas.onmouseleave = () => { drawing = false; };
-
         canvas.onmousemove = (e) => {
             e.preventDefault();
             handleDrawMove(getCanvasCoords(e.clientX, e.clientY));
         };
-
         canvas.ontouchstart = (e) => {
             e.preventDefault();
             const touch = e.touches[0];
             if (!touch) return;
             handleDrawStart(getCanvasCoords(touch.clientX, touch.clientY));
         };
-
         canvas.ontouchmove = (e) => {
             e.preventDefault();
             const touch = e.touches[0];
             if (!touch) return;
             handleDrawMove(getCanvasCoords(touch.clientX, touch.clientY));
         };
-
         canvas.ontouchend = () => { drawing = false; };
-
         function draw(x, y, tool, color) {
             ctx.lineWidth = (tool === 'erase') ? 25 : 4;
             ctx.lineCap = "round";
@@ -888,12 +829,10 @@
         function renderHistory() {
             const container = document.getElementById("history-list");
             container.innerHTML = "";
-
             if (movieHistory.length === 0) {
                 container.innerHTML = "<p>No movies yet</p>";
                 return;
             }
-
             movieHistory.forEach((movie, index) => {
                 const div = document.createElement("div");
                 div.style.padding = "10px";
@@ -904,13 +843,11 @@
                 container.appendChild(div);
             });
         }
-
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('open-mobile');
             sidebar.classList.toggle('hidden-mobile');
         }
-
         function toggleHistory() {
             const modal = document.getElementById("history-modal");
             const overlay = document.getElementById("history-overlay");
