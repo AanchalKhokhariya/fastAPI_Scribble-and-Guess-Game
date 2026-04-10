@@ -345,6 +345,21 @@
             <div id="timer-display" class="hidden">⏱️ <span id="time-left">05:00</span></div>
             <div id="selection-timer-display" class="hidden">🕒 <span id="selection-time-left">01:00</span></div>
             <div id="setup-area">
+                <div id="lobby-waiting-area" class="hidden" style="text-align: center; padding: 40px; background: var(--sidebar-bg); border-radius: 20px;">
+                <h2 style="color: var(--success);">🎮 In Lobby</h2>
+                <p id="lobby-count-text">Waiting for players (0/6)...</p>
+                
+                <div id="host-controls" class="hidden" style="margin-top: 20px;">
+                    <p style="color: var(--text-dim); font-size: 0.9rem;">You are the Host</p>
+                    <button class="start-btn" onclick="hostStartGame()" style="background: var(--success); width: auto; padding: 15px 40px;">
+                        START GAME
+                    </button>
+                </div>
+                
+                <div id="guest-waiting" class="hidden">
+                    <p style="animation: blink 1.5s infinite;">Waiting for host to start...</p>
+                </div>
+            </div>
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
                 <div id="drawer-input" class="hidden">
                     <div style="margin: 10px 0;">
@@ -392,6 +407,7 @@
         }
         let myName = getCookie("username") || "Anonymous";
         const currentRoom = getCookie("room_id");
+        console.log(`[DEBUG-FRONTEND] Page loaded. Username: ${myName}, Room: ${currentRoom}`);
         document.getElementById('room-display').innerText = "ROOM: " + currentRoom;
         let protocol = window.location.protocol === "https:" ? "wss" : "ws";
         let ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
@@ -400,13 +416,18 @@
         let countdownInterval = null;
         let timeLeft = 0; 
         let previousScores = {};
+        let currentMaxPlayers = 6;  // Default, will be updated from init
+        let currentRoomStatus = null;  // Will be updated from init
+        console.log(`[DEBUG-FRONTEND] WebSocket connecting to /ws`);
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
+            console.log(`[DEBUG-FRONTEND] WS message received:`, data);
             if (data.type === "history_update") {
                 movieHistory = data.history;
                 renderHistory();
             }
             if (data.type === "player_list") {
+                console.log(`[DEBUG-FRONTEND] player_list update: ${data.players.length} players, room_status=${currentRoomStatus}`);
                 data.players.forEach(p => {
                     if (previousScores[p.name] !== undefined && p.score > previousScores[p.name]) {
                         const pointsGained = p.score - previousScores[p.name];
@@ -417,6 +438,12 @@
                 });
                 window.lastPlayerData = data.players; 
                 updatePlayerList(data.players);
+                
+                // Update lobby count if we're in LOBBY mode
+                if (currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] Updating lobby count to ${data.players.length}/${currentMaxPlayers}`);
+                    document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.players.length}/${currentMaxPlayers})...`;
+                }
             }
             if (data.type === "movie_options") {
                 showMovieOptions(data.options);
@@ -474,6 +501,32 @@
                 }, 5000);
             }
             if (data.type === "init") {
+                console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}`);
+                currentMaxPlayers = data.max_players;
+                currentRoomStatus = data.room_status;
+                if (data.room_status === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] Room is in LOBBY. Showing waiting area, hiding game and setup areas.`);
+                    document.getElementById('lobby-waiting-area').classList.remove('hidden');
+                    document.getElementById('game-area').classList.add('hidden');
+                    document.getElementById('setup-area').classList.add('hidden');
+                    document.getElementById('drawer-input').classList.add('hidden');
+                    document.getElementById('controls').classList.add('hidden');
+
+                    document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.player_count}/${data.max_players})...`;
+                    if (myName === data.host_name) {
+                        console.log(`[DEBUG-FRONTEND] Current player is HOST. Showing start button.`);
+                        document.getElementById('host-controls').classList.remove('hidden');
+                        document.getElementById('guest-waiting').classList.add('hidden');
+                    } else {
+                        console.log(`[DEBUG-FRONTEND] Current player is GUEST. Waiting for host to start.`);
+                        document.getElementById('host-controls').classList.add('hidden');
+                        document.getElementById('guest-waiting').classList.remove('hidden');
+                    }
+                } else {
+                    console.log(`[DEBUG-FRONTEND] Room is PLAYING. Hiding lobby area, showing game.`);
+                    document.getElementById('lobby-waiting-area').classList.add('hidden');
+                    setupGameUI(data.display, data.full_movie);
+                }
                 if (data.history_movies) {
                     movieHistory = data.history_movies;
                     renderHistory();
@@ -518,15 +571,21 @@
                 }
             }
             if (data.type === "game_start") {
+                console.log(`[DEBUG-FRONTEND] game_start event received. Transitioning to PLAYING.`);
                 stopSelectionTimer();
                 currentRound = data.round_number || (currentRound); 
                 document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
+                document.getElementById('lobby-waiting-area').classList.add('hidden');
+                document.getElementById('game-area').classList.remove('hidden');
+                setupGameUI(data.display, data.full_movie);
+                startTimer(data.time_left || 300);
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
                 startTimer(data.time_left || 300);
-                hasWon = false; 
+                hasWon = false;
+                console.log(`[DEBUG-FRONTEND] Game started. Drawer: ${data.drawer_name}, Timer: ${data.time_left}s`);
             }
             if (data.type === "announcement") {
                 stopTimer();
@@ -652,6 +711,11 @@
             createGuessingBoxes(display);
         }
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
+        function hostStartGame() {
+            console.log(`[DEBUG-FRONTEND] Host clicked START GAME button`);
+            ws.send(JSON.stringify({type: "start_game"}));
+            console.log(`[DEBUG-FRONTEND] Sent start_game event to server`);
+        }
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
             let showVowels = document.getElementById('hintToggle').checked;
@@ -748,6 +812,7 @@
             ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: true, color: color }));
             draw(coords.x, coords.y, currentTool, color);
         }
+        
         function handleDrawMove(coords) {
             if (!drawing || myRole !== "drawer") return;
             const color = document.getElementById('colorPicker').value;

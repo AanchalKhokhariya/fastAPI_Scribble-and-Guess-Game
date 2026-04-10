@@ -22,15 +22,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Updated Room Model in main.py
 class GameRoom:
-    def __init__(self, room_id: str, host: str, room_type: str, max_players: int = 6):
+    def __init__(self, room_id: str, host: str, room_type: str, max_players: int):
         self.room_id = room_id
         self.host = host
-        self.room_type = room_type  # "private" or "public"
+        self.room_type = room_type
         self.max_players = max_players
-        self.manager = ConnectionManager()
         self.players: List[str] = []
+        self.status = "LOBBY"  # Status: LOBBY, PLAYING
         self.game_started = False
+        self.manager = ConnectionManager()
 
     def is_full(self):
         return len(self.players) >= self.max_players
@@ -47,8 +49,9 @@ class GameRoom:
         return self.room_type == "public" and self.is_full()
 
 
-public_rooms: Dict[str, GameRoom] = {}
-lobby_connections: List[WebSocket] = []
+
+public_rooms: Dict[str, GameRoom] = {} 
+lobby_connections: List[WebSocket] = [] 
 
 @app.post("/join")
 async def join(
@@ -58,6 +61,7 @@ async def join(
     room_type: str = Form("private"),  
     max_players: int = Form(6)         
 ):
+    print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type}")
     if action == "create":
         max_players = max(2, min(6, max_players))
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -71,25 +75,35 @@ async def join(
 
         room.add_player(name)
         rooms[room_code] = room
+        print(f"[DEBUG] Room Created: {room_code} by {name} (Max: {max_players})")
 
         if room_type == "public":
             public_rooms[room_code] = room
+            print(f"[DEBUG] Public Room added to lobby: {room_code}")
+            await broadcast_lobby_update()
 
     elif action == "join":
+        if not room_code:
+            return RedirectResponse(url="/?error=missing_code", status_code=303)
+
         room_code = room_code.upper().strip()
+        print(f"[DEBUG] Attempting to join Room: {room_code}")
 
         if room_code not in rooms:
+            print(f"[DEBUG] Join Failed: Room {room_code} not found")
             return RedirectResponse(url=f"/?error=not_found&code={room_code}", status_code=303)
 
         room = rooms[room_code]
 
         if room.is_full():
+            print(f"[DEBUG] Join Failed: Room {room_code} is full")
             return RedirectResponse(url=f"/?error=full&code={room_code}", status_code=303)
 
         name = get_unique_name(name, room.players)
         room.add_player(name)
+        print(f"[DEBUG] User {name} joined Room {room_code}. Total players: {len(room.players)}")
 
-        await broadcast_lobby()
+        await broadcast_lobby_update()
 
     response = RedirectResponse(url="/game", status_code=303)
     response.set_cookie("username", name)
@@ -297,6 +311,7 @@ class ConnectionManager:
         ws_id = id(websocket)
         self.active_connections[name] = websocket
         self.ws_to_name[ws_id] = name
+        print(f"[DEBUG-BACKEND] Player {name} connected. Total players: {len(self.active_connections)}")
 
         if name != original_name:
             await websocket.send_json({
@@ -307,17 +322,13 @@ class ConnectionManager:
         if r.get(f"score:{name}") is None:
             r.set(f"score:{name}", 0)
         
+        # Only assign drawer if game has already started
         role = "guesser"
-
-        if name == self.game_state["drawer_name"]:
+        if self.game_state["drawer_assigned"] and name == self.game_state["drawer_name"]:
             role = "drawer"
-
-        elif not self.game_state["drawer_assigned"]:
-            self.game_state["drawer_assigned"] = True
-            self.game_state["drawer_name"] = name
-            self.game_state["is_selecting"] = True
-            role = "drawer"
-            await self.start_selection_timer()
+            print(f"[DEBUG-BACKEND] {name} assigned drawer role (already assigned)")
+        else:
+            print(f"[DEBUG-BACKEND] {name} assigned guesser role (game in lobby or not their turn)")
 
         await self.broadcast({"type": "player_list", "players": self.get_player_data()})
         return role
@@ -387,6 +398,9 @@ class ConnectionManager:
         self.round_timer_task = asyncio.create_task(timer())
 
     async def restart_game(self):
+        """Start a new round. Handles both initial game start (from lobby) and between-round transitions."""
+        print(f"[DEBUG-BACKEND] restart_game() called. drawer_assigned={self.game_state['drawer_assigned']}, active_connections={len(self.active_connections)}")
+        
         if self.game_state.get("movie"):
             self.movie_history.append(self.game_state["movie"])
         await self.broadcast({
@@ -407,21 +421,33 @@ class ConnectionManager:
         })
         self.draw_history = []
         if not self.active_connections:
+            print(f"[DEBUG-BACKEND] No active connections, returning")
             return
         
-        old_drawer_name = self.game_state["drawer_name"]
+        # Pick drawer: first game or normal rotation
+        old_drawer_name = self.game_state.get("drawer_name")
         names = list(self.active_connections.keys())
-        if len(names) > 1 and old_drawer_name in names:
-            names.remove(old_drawer_name)
         
-        new_drawer_name = random.choice(names)
+        if not old_drawer_name or not self.game_state["drawer_assigned"]:
+            # Initial game - pick random from all players
+            new_drawer_name = random.choice(names)
+            print(f"[DEBUG-BACKEND] Initial game start - selecting drawer {new_drawer_name} from {names}")
+        else:
+            # Rotate drawer - exclude current drawer if possible
+            if len(names) > 1 and old_drawer_name in names:
+                names.remove(old_drawer_name)
+            new_drawer_name = random.choice(names)
+            print(f"[DEBUG-BACKEND] Rotating drawer from {old_drawer_name} to {new_drawer_name}")
+        
         self.game_state["drawer_name"] = new_drawer_name
         self.game_state["drawer_assigned"] = True
+        self.game_state["is_selecting"] = True
 
         await self.start_selection_timer()
 
         for name, ws in self.active_connections.items():
             role = "drawer" if name == new_drawer_name else "guesser"
+            print(f"[DEBUG-BACKEND] Sending init to {name} with role={role}")
             await ws.send_json({
                 "type": "init",
                 "role": role,
@@ -486,26 +512,44 @@ async def get(request: Request):
     return templates.TemplateResponse("front_page.html", {"request": request})
 
 @app.get("/game")
-async def get_game(request: Request, room_id: str = Cookie(None)):
+async def get_game(request: Request, room_id: str = Cookie(None), username: str = Cookie(None)):
     
     if not room_id:
         return RedirectResponse(url="/", status_code=303)
     
     return templates.TemplateResponse("index.html", {
         "request": request, 
-        "room_code": room_id
+        "room_code": room_id,
+        "username": username or "Guest"
     })
 
+
+async def broadcast_lobby_update():
+    """Sends current public rooms to all users in the lobby."""
+    public_list = [
+        {
+            "room_id": r.room_id,
+            "host": r.host,
+            "count": len(r.players),
+            "max": r.max_players,
+            "status": r.status,
+        }
+        for r in rooms.values() if r.room_type == "public" and not r.game_started
+    ]
+    for ws in lobby_connections:
+        try:
+            await ws.send_json({"type": "lobby_update", "rooms": public_list})
+        except:
+            continue
+
 @app.websocket("/ws/lobby")
-async def lobby_ws(websocket: WebSocket):
+async def lobby_endpoint(websocket: WebSocket):
     await websocket.accept()
     lobby_connections.append(websocket)
-
-    await send_lobby_data(websocket)
-
+    await broadcast_lobby_update() # Send initial list
     try:
         while True:
-            await websocket.receive_text()
+            await websocket.receive_text() # Keep connection alive
     except:
         lobby_connections.remove(websocket)
 
@@ -531,23 +575,36 @@ async def broadcast_lobby():
             continue
 
 @app.websocket("/ws") 
-async def websocket_endpoint(
-    websocket: WebSocket, 
-    username: str = Cookie(None), 
-    room_id: str = Cookie(None) 
-):
+async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None), room_id: str = Cookie(None)):
+    room = rooms.get(room_id)
+
     if not username or not room_id or room_id not in rooms:
+        print(f"[DEBUG] WS Connection Denied: Missing credentials or room {room_id} exists: {room_id in rooms}")
         await websocket.close()
         return
 
     room = rooms[room_id]
     manager = room.manager
+    print(f"[DEBUG] WS Connecting: {username} to Room {room_id}")
+
     role = await manager.connect(websocket, username)
+    print(f"[DEBUG-BACKEND] {username} connected to room {room_id}, role={role}, room_type={room.room_type}")
+    
+    if room.room_type == "public" and room.is_full() and not room.game_started:
+        print(f"[DEBUG-BACKEND] Room {room_id} is now full ({len(room.players)}/{room.max_players}). Auto-starting public game")
+        room.game_started = True
+        room.status = "PLAYING"
+        await room.manager.restart_game()
+        await broadcast_lobby_update()
 
     if room.should_start_game() and not room.game_started:
+        print(f"[DEBUG-BACKEND] Room {room_id} conditions met for auto-start")
         room.game_started = True
+        room.status = "PLAYING"
         await manager.restart_game()
-    await broadcast_lobby()
+    
+    print(f"[DEBUG-BACKEND] Broadcasting lobby update")
+    await broadcast_lobby_update()
 
     if role is None:
         return  
@@ -559,6 +616,11 @@ async def websocket_endpoint(
         "type": "init", 
         "role": role, 
         "round_number": current_round,
+        "room_status": room.status,
+        "host_name": room.host,
+        "room_type": room.room_type,
+        "player_count": len(room.players),
+        "max_players": room.max_players,
         "movie_set": bool(manager.game_state["movie"]),
         "display": manager.game_state["display_name"], 
         "full_movie": manager.game_state["movie"],
@@ -575,6 +637,25 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_json()
+            if data["type"] == "start_game":
+                print(f"[DEBUG-BACKEND] start_game event from {username} in room {room_id}. Is host? {username == room.host}")
+                if username == room.host:
+                    if len(room.players) >= 2:
+                        print(f"[DEBUG-BACKEND] Host {username} starting room {room_id} with {len(room.players)} players")
+                        room.status = "PLAYING"
+                        room.game_started = True
+                        await manager.restart_game() 
+                        await broadcast_lobby_update()
+                    else:
+                        print(f"[DEBUG-BACKEND] Host tried to start with only {len(room.players)} players (need 2+)")
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Need at least 2 players to start!"
+                        })
+                else:
+                    print(f"[DEBUG-BACKEND] Non-host {username} tried to start game (host is {room.host})")
+            if data["type"] not in ["drawing"]: 
+                print(f"[DEBUG] WS Message from {username} in {room_id}: {data['type']}")
             if data["type"] == "set_movie":
                 manager.cancel_selection_timer()
                 manager.game_state["movie"] = data["movie"].upper()
@@ -679,7 +760,7 @@ async def websocket_endpoint(
             if room_id in public_rooms:
                 del public_rooms[room_id]
 
-        await broadcast_lobby()
+        await broadcast_lobby_update()
         
         await manager.disconnect(websocket)
         

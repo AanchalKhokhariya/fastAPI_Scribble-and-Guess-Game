@@ -81,12 +81,30 @@
 
         <form action="/join" method="POST" id="gameForm">
             <input type="text" name="name" class="name-input" placeholder="Enter Your Name" required>
-            
+
+            <input type="hidden" name="action" id="actionInput" value="create">
+            <input type="hidden" name="room_type" id="roomTypeInput" value="private">
+            <input type="hidden" name="max_players" id="maxPlayersInput" value="4">
+
+            <div id="room-mode-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; justify-content: center;">
+                <button type="button" class="start-btn" onclick="prepareCreate('private')" style="flex: 1;">Create Private Room</button>
+                <button type="button" class="start-btn" onclick="prepareCreate('public')" style="flex: 1; background: #22c55e;">Create Public Room</button>
+                <button type="button" class="start-btn" onclick="toggleJoinUI()" style="flex: 1; background: #334155;">Join Room</button>
+            </div>
+
             <div id="join-section" style="display: none; margin-bottom: 20px;">
                 <input type="text" name="room_code" id="roomInput" class="name-input" placeholder="6-Digit Code" maxlength="6">
             </div>
 
-            <input type="hidden" name="action" id="actionInput" value="create">
+            <div id="public-settings" style="display: none; margin-bottom: 20px; text-align: left;">
+                <label for="maxPlayers" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
+                    Max Players: <span id="max-players-display" style="color: var(--primary); font-weight: bold;">4</span>
+                </label>
+                <input type="range" name="max_players" id="maxPlayers" min="2" max="6" value="4" 
+                    style="width: 100%; accent-color: var(--primary);"
+                    oninput="setMaxPlayers(this.value)">
+            </div>
+
             <div id="timer-selection" style="margin-bottom: 20px;">
                 <label for="duration" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
                     Round Duration: <span id="duration-val" style="color: var(--primary); font-weight: bold;">5</span> Minutes
@@ -95,29 +113,52 @@
                     style="width: 100%; accent-color: var(--primary);"
                     oninput="document.getElementById('duration-val').innerText = this.value">
             </div>
+
             <div id="button-container" style="display: flex; gap: 10px; flex-direction: column;">
-                <button type="submit" id="submitBtn" class="start-btn">Create Room</button>
-                
-                <button type="button" id="showJoinBtn" onclick="toggleJoinUI()" class="start-btn" style="background: #334155;">I have a code</button>
+                <button type="submit" id="submitBtn" class="start-btn">Create Private Room</button>
             </div>
         </form>
     </div>
+    <div id="public-lobby" style="margin-top: 30px; border-top: 1px solid #334155; padding-top: 20px;">
+        <h3>🌐 Public Rooms</h3>
+        <div id="room-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <p style="color: var(--text-dim);">Looking for active games...</p>
+        </div>
+    </div>
 
 <script>
-    function toggleJoinUI() {
-        document.getElementById('join-section').style.display = 'block';
-        document.getElementById('timer-selection').style.display = 'none'; // Hide timer for joiners
-        document.getElementById('submitBtn').innerText = 'Join Room';
-        document.getElementById('actionInput').value = 'join';
-        document.getElementById('showJoinBtn').style.display = 'none';
-        document.getElementById('roomInput').required = true;
-    }
-    function setAction(val) {
-        const input = document.getElementById('roomInput');
-        if (val === 'create') {
-            document.getElementById('actionInput').value = 'create';
-            input.required = false;
+    function prepareCreate(type) {
+        document.getElementById('actionInput').value = 'create';
+        document.getElementById('roomTypeInput').value = type;
+        document.getElementById('join-section').style.display = 'none';
+        document.getElementById('roomInput').required = false;
+        document.getElementById('timer-selection').style.display = 'block';
+
+        if (type === 'public') {
+            document.getElementById('public-settings').style.display = 'block';
+            document.getElementById('submitBtn').innerText = 'Create Public Room';
+        } else {
+            document.getElementById('public-settings').style.display = 'none';
+            document.getElementById('submitBtn').innerText = 'Create Private Room';
         }
+    }
+
+    function toggleJoinUI(prefillCode) {
+        document.getElementById('actionInput').value = 'join';
+        document.getElementById('roomTypeInput').value = 'private';
+        document.getElementById('join-section').style.display = 'block';
+        document.getElementById('public-settings').style.display = 'none';
+        document.getElementById('timer-selection').style.display = 'none';
+        document.getElementById('submitBtn').innerText = 'Join Room';
+        document.getElementById('roomInput').required = true;
+        if (prefillCode) {
+            document.getElementById('roomInput').value = prefillCode;
+        }
+    }
+
+    function setMaxPlayers(value) {
+        document.getElementById('maxPlayersInput').value = value;
+        document.getElementById('max-players-display').innerText = value;
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -139,6 +180,33 @@
         else {
             errorBox.innerText = "Something went wrong.";
         }
+    }
+    const lobbyWs = new WebSocket(`ws://${window.location.host}/ws/lobby`);
+    
+    lobbyWs.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "lobby_update") {
+            const list = document.getElementById('room-list');
+            list.innerHTML = "";
+            if (data.rooms.length === 0) {
+                list.innerHTML = "<p>No public rooms available. Create one!</p>";
+            }
+            data.rooms.forEach(room => {
+                const row = document.createElement('div');
+                row.innerHTML = `
+                    <div style="display:flex; justify-content: space-between; background: #0f172a; padding: 10px; border-radius: 8px;">
+                        <span>ID: ${room.room_id} (${room.count}/${room.max})</span>
+                        <button onclick="joinPublic('${room.room_id}')" class="btn" style="padding: 2px 10px;">Join</button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+    };
+
+    function joinPublic(code) {
+        document.getElementById('roomInput').value = code;
+        toggleJoinUI(); 
     }
 
 </script>
