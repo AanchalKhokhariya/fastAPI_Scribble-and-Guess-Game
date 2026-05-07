@@ -650,7 +650,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
                         print(f"[DEBUG-BACKEND] Host tried to start with only {len(room.players)} players (need 2+)")
                         await websocket.send_json({
                             "type": "error",
-                            "message": "Need at least 2 players to start!"
+                            "message": "At least 2 players are required to start the game."
                         })
                 else:
                     print(f"[DEBUG-BACKEND] Non-host {username} tried to start game (host is {room.host})")

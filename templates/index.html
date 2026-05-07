@@ -349,11 +349,22 @@
                 <h2 style="color: var(--success);">🎮 In Lobby</h2>
                 <p id="lobby-count-text">Waiting for players (0/6)...</p>
                 
+                <div id="room-info" class="hidden" style="margin: 20px 0; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <p style="margin: 0 0 12px 0; color: var(--text-dim); font-size: 0.9rem;">PRIVATE ROOM CODE</p>
+                    <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
+                        <div style="background: #0f172a; padding: 12px 24px; border-radius: 8px; border: 2px solid var(--draw-blue); font-weight: 800; font-size: 1.3rem; letter-spacing: 2px;" id="room-code-display"></div>
+                        <button class="btn" onclick="copyRoomCode()" style="padding: 12px 16px; background: var(--draw-blue); border: none;">📋 Copy</button>
+                    </div>
+                    <p style="margin: 12px 0 8px 0; color: var(--text-dim); font-size: 0.85rem;">Share the code with friends or use the link below</p>
+                    <button class="btn" onclick="copyInviteLink()" style="width: 100%; margin-top: 8px; background: rgba(59, 130, 246, 0.2); border-color: var(--draw-blue);">🔗 Copy Invite Link</button>
+                </div>
+                
                 <div id="host-controls" class="hidden" style="margin-top: 20px;">
                     <p style="color: var(--text-dim); font-size: 0.9rem;">You are the Host</p>
                     <button class="start-btn" onclick="hostStartGame()" style="background: var(--success); width: auto; padding: 15px 40px;">
                         START GAME
                     </button>
+                    <div id="start-error" class="hidden" style="margin-top: 12px; padding: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 8px; color: #fca5a5; font-size: 0.9rem;"></div>
                 </div>
                 
                 <div id="guest-waiting" class="hidden">
@@ -405,7 +416,8 @@
             let parts = value.split(`; ${name}=`);
             if (parts.length === 2) return parts.pop().split(';').shift();
         }
-        let myName = getCookie("username") || "Anonymous";
+        // This removes the surrounding double quotes and decodes any URL-encoded spaces
+        let myName = decodeURIComponent(getCookie("username") || "Anonymous").replace(/^"|"$/g, '');
         const currentRoom = getCookie("room_id");
         console.log(`[DEBUG-FRONTEND] Page loaded. Username: ${myName}, Room: ${currentRoom}`);
         document.getElementById('room-display').innerText = "ROOM: " + currentRoom;
@@ -418,6 +430,27 @@
         let previousScores = {};
         let currentMaxPlayers = 6;  // Default, will be updated from init
         let currentRoomStatus = null;  // Will be updated from init
+        let currentRoomType = "private";  // Will be updated from init
+        
+        function copyRoomCode() {
+            const roomCode = getCookie("room_id");
+            if (roomCode) {
+                navigator.clipboard.writeText(roomCode).then(() => {
+                    showToast("✅ Room code copied!");
+                });
+            }
+        }
+        
+        function copyInviteLink() {
+            const roomCode = getCookie("room_id");
+            if (roomCode) {
+                const inviteLink = `${window.location.origin}/?invite=${roomCode}`;
+                navigator.clipboard.writeText(inviteLink).then(() => {
+                    showToast("✅ Invite link copied!");
+                });
+            }
+        }
+        
         console.log(`[DEBUG-FRONTEND] WebSocket connecting to /ws`);
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
@@ -425,6 +458,16 @@
             if (data.type === "history_update") {
                 movieHistory = data.history;
                 renderHistory();
+            }
+            if (data.type === "error") {
+                console.log(`[DEBUG-FRONTEND] Error from server: ${data.message}`);
+                const errorDiv = document.getElementById('start-error');
+                if (errorDiv && currentRoomStatus === "LOBBY") {
+                    errorDiv.innerText = "❌ " + data.message;
+                    errorDiv.classList.remove('hidden');
+                }
+                showToast("⚠️ " + data.message);
+                return;
             }
             if (data.type === "player_list") {
                 console.log(`[DEBUG-FRONTEND] player_list update: ${data.players.length} players, room_status=${currentRoomStatus}`);
@@ -439,10 +482,14 @@
                 window.lastPlayerData = data.players; 
                 updatePlayerList(data.players);
                 
-                // Update lobby count if we're in LOBBY mode
+                // Update lobby count and clear error if we're in LOBBY mode
                 if (currentRoomStatus === "LOBBY") {
                     console.log(`[DEBUG-FRONTEND] Updating lobby count to ${data.players.length}/${currentMaxPlayers}`);
                     document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.players.length}/${currentMaxPlayers})...`;
+                    // Clear error if 2+ players now
+                    if (data.players.length >= 2) {
+                        document.getElementById('start-error').classList.add('hidden');
+                    }
                 }
             }
             if (data.type === "movie_options") {
@@ -501,31 +548,56 @@
                 }, 5000);
             }
             if (data.type === "init") {
-                console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}`);
+                console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}, room_type=${data.room_type}, selection_active=${data.selection_active}, movie_set=${data.movie_set}`);
                 currentMaxPlayers = data.max_players;
-                currentRoomStatus = data.room_status;
-                if (data.room_status === "LOBBY") {
-                    console.log(`[DEBUG-FRONTEND] Room is in LOBBY. Showing waiting area, hiding game and setup areas.`);
+                if (data.room_status !== undefined) {
+                    currentRoomStatus = data.room_status;
+                }
+                if (data.room_type !== undefined) {
+                    currentRoomType = data.room_type;
+                }
+                
+                // Determine if we're in LOBBY or PLAYING state
+                // LOBBY: room_status is explicitly "LOBBY" OR not set and we're waiting
+                // PLAYING: room_status is explicitly "PLAYING" OR we have selection/game active
+                const isGameStarted = data.selection_active || data.movie_set || (currentRoomStatus === "PLAYING");
+                const isInLobby = currentRoomStatus === "LOBBY" && !isGameStarted;
+                
+                if (isInLobby) {
+                    console.log(`[DEBUG-FRONTEND] Room is in LOBBY. Showing waiting area.`);
+                    document.getElementById('setup-area').classList.remove('hidden'); // ✅ FIX: Make sure parent container is visible
                     document.getElementById('lobby-waiting-area').classList.remove('hidden');
                     document.getElementById('game-area').classList.add('hidden');
-                    document.getElementById('setup-area').classList.add('hidden');
                     document.getElementById('drawer-input').classList.add('hidden');
                     document.getElementById('controls').classList.add('hidden');
+                    document.getElementById('role-display').style.display = 'none'; // Optional: hide role text while in lobby
 
-                    document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.player_count}/${data.max_players})...`;
+                    if (data.player_count !== undefined) {
+                        document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.player_count}/${data.max_players})...`;
+                    }
+                    
+                    // Show room info for private rooms
+                    if (data.room_type === "private") {
+                        const roomCode = getCookie("room_id");
+                        document.getElementById('room-info').classList.remove('hidden');
+                        document.getElementById('room-code-display').innerText = roomCode || "LOADING...";
+                    } else {
+                        document.getElementById('room-info').classList.add('hidden');
+                    }
+                    
                     if (myName === data.host_name) {
                         console.log(`[DEBUG-FRONTEND] Current player is HOST. Showing start button.`);
                         document.getElementById('host-controls').classList.remove('hidden');
                         document.getElementById('guest-waiting').classList.add('hidden');
+                        document.getElementById('start-error').classList.add('hidden');
                     } else {
                         console.log(`[DEBUG-FRONTEND] Current player is GUEST. Waiting for host to start.`);
                         document.getElementById('host-controls').classList.add('hidden');
                         document.getElementById('guest-waiting').classList.remove('hidden');
                     }
                 } else {
-                    console.log(`[DEBUG-FRONTEND] Room is PLAYING. Hiding lobby area, showing game.`);
+                    console.log(`[DEBUG-FRONTEND] Room is PLAYING. Hiding lobby area.`);
                     document.getElementById('lobby-waiting-area').classList.add('hidden');
-                    setupGameUI(data.display, data.full_movie);
                 }
                 if (data.history_movies) {
                     movieHistory = data.history_movies;
@@ -542,15 +614,20 @@
                 document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
                 if (myRole === "drawer") {
-                    document.getElementById('drawer-input').classList.remove('hidden');
-                    document.getElementById('controls').classList.remove('hidden');
+                    if (!isInLobby) {
+                        document.getElementById('drawer-input').classList.remove('hidden');
+                        document.getElementById('controls').classList.remove('hidden');
+                    }
                 } else {
                     document.getElementById('drawer-input').classList.add('hidden');
                     document.getElementById('controls').classList.add('hidden');
                 }
                 updateDrawerStatus(data.drawer_name);
                 if (data.selection_active && myRole === "drawer") {
+                    console.log(`[DEBUG-FRONTEND] Drawer in selection phase. Starting timer.`);
                     startSelectionTimer(data.selection_time_left || 60);
+                    document.getElementById('setup-area').classList.remove('hidden');
+                    document.getElementById('game-area').classList.add('hidden');
                 } else {
                     stopSelectionTimer();
                 }
@@ -564,8 +641,10 @@
                     startTimer(data.time_left);
                 }
                 if (data.winner_msg) showAnnouncement(data.winner_msg, data.revealed);
-                if (data.movie_set) setupGameUI(data.display, data.full_movie);
-                else {
+                if (data.movie_set) {
+                    console.log(`[DEBUG-FRONTEND] Movie set by drawer. Setting up game UI.`);
+                    setupGameUI(data.display, data.full_movie);
+                } else if (!isInLobby) {
                     document.getElementById('setup-area').classList.remove('hidden');
                     document.getElementById('game-area').classList.add('hidden');
                 }
@@ -713,6 +792,14 @@
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
         function hostStartGame() {
             console.log(`[DEBUG-FRONTEND] Host clicked START GAME button`);
+            const playerCount = window.lastPlayerData ? window.lastPlayerData.length : 0;
+            if (playerCount < 2) {
+                const errorDiv = document.getElementById('start-error');
+                errorDiv.innerText = "❌ At least 2 players are required to start the game.";
+                errorDiv.classList.remove('hidden');
+                showToast("⚠️ At least 2 players are required to start the game.");
+                return;
+            }
             ws.send(JSON.stringify({type: "start_game"}));
             console.log(`[DEBUG-FRONTEND] Sent start_game event to server`);
         }

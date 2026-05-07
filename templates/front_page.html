@@ -93,7 +93,7 @@
             </div>
 
             <div id="join-section" style="display: none; margin-bottom: 20px;">
-                <input type="text" name="room_code" id="roomInput" class="name-input" placeholder="6-Digit Code" maxlength="6">
+                <input type="text" name="room_code" id="roomInput" class="name-input" placeholder="6-Digit Code" maxlength="6" style="text-transform: uppercase;">
             </div>
 
             <div id="public-settings" style="display: none; margin-bottom: 20px; text-align: left;">
@@ -163,6 +163,7 @@
 
     const params = new URLSearchParams(window.location.search);
     const error = params.get("error");
+    const inviteCode = params.get("invite");
 
     if (error) {
         const errorBox = document.getElementById("error-box");
@@ -180,6 +181,17 @@
         else {
             errorBox.innerText = "Something went wrong.";
         }
+    }
+    
+    // If there's an invite code in the URL, pre-fill and show the join UI
+    if (inviteCode) {
+        document.getElementById('actionInput').value = 'join';
+        document.getElementById('join-section').style.display = 'block';
+        document.getElementById('roomInput').value = inviteCode.toUpperCase();
+        document.getElementById('roomInput').required = true;
+        document.getElementById('submitBtn').innerText = 'Join Room';
+        document.getElementById('public-settings').style.display = 'none';
+        document.getElementById('timer-selection').style.display = 'none';
     }
     const lobbyWs = new WebSocket(`ws://${window.location.host}/ws/lobby`);
     
