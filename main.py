@@ -199,14 +199,14 @@ class ConnectionManager:
         return int(score) if score else 0
     def get_round(self):
         round_no = r.get(f"round:{id(self)}")
-        return int(round_no) if round_no else 1
+        return int(round_no) if round_no is not None else 0
 
     def increment_round(self):
         current = self.get_round()
         r.set(f"round:{id(self)}", current + 1)
 
     def reset_round(self):
-        r.set(f"round:{id(self)}", 1)
+        r.set(f"round:{id(self)}", 0)
 
     def set_player_score(self, name: str, points: int):
         current_score = self.get_player_score(name)

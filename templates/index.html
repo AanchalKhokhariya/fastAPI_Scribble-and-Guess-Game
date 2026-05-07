@@ -347,7 +347,7 @@
             <div id="setup-area">
                 <div id="lobby-waiting-area" class="hidden" style="text-align: center; padding: 40px; background: var(--sidebar-bg); border-radius: 20px;">
                 <h2 style="color: var(--success);">🎮 In Lobby</h2>
-                <p id="lobby-count-text">Waiting for players (0/6)...</p>
+                <p id="lobby-count-text">Waiting for players ...</p>
                 
                 <div id="room-info" class="hidden" style="margin: 20px 0; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
                     <p style="margin: 0 0 12px 0; color: var(--text-dim); font-size: 0.9rem;">PRIVATE ROOM CODE</p>
@@ -415,7 +415,7 @@
         </div>
     </div>
     <script>
-        let currentRound = 1;
+        let currentRound = 0;
         function getCookie(name) {
             let value = `; ${document.cookie}`;
             let parts = value.split(`; ${name}=`);
@@ -490,7 +490,7 @@
                 // Update lobby count and clear error if we're in LOBBY mode
                 if (currentRoomStatus === "LOBBY") {
                     console.log(`[DEBUG-FRONTEND] Updating lobby count to ${data.players.length}/${currentMaxPlayers}`);
-                    document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.players.length}/${currentMaxPlayers})...`;
+                    document.getElementById('lobby-count-text').innerText = `Waiting for players ...`;
                     // Clear error if 2+ players now
                     if (data.players.length >= 2) {
                         document.getElementById('start-error').classList.add('hidden');
@@ -594,7 +594,7 @@
                     document.getElementById('role-display').style.display = 'none'; // Optional: hide role text while in lobby
 
                     if (data.player_count !== undefined) {
-                        document.getElementById('lobby-count-text').innerText = `Waiting for players (${data.player_count}/${data.max_players})...`;
+                        document.getElementById('lobby-count-text').innerText = `Waiting for players...`;
                     }
                     
                     // Show room info for private rooms
