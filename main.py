@@ -47,6 +47,21 @@ class GameRoom:
 
     def should_start_game(self):
         return self.room_type == "public" and self.is_full()
+    
+    def transfer_host(self):
+        """Transfers host role to another player. Returns new host name or None if no players left."""
+        if not self.players:
+            return None
+        
+        if self.host in self.players:
+            self.players.remove(self.host)
+        
+        if not self.players:
+            return None
+        
+        new_host = self.players[0]
+        self.host = new_host
+        return new_host
 
 
 
@@ -63,7 +78,12 @@ async def join(
 ):
     print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type}")
     if action == "create":
-        max_players = max(2, min(6, max_players))
+        # Public rooms can have unlimited players (use high max_players)
+        if room_type == "public":
+            max_players = 100  # No practical limit for public rooms
+        else:
+            max_players = max(2, min(6, max_players))
+        
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
         room = GameRoom(
@@ -75,10 +95,9 @@ async def join(
 
         room.add_player(name)
         rooms[room_code] = room
-        print(f"[DEBUG] Room Created: {room_code} by {name} (Max: {max_players})")
+        print(f"[DEBUG] Room Created: {room_code} by {name} | Type: {room_type} (Max: {max_players})")
 
         if room_type == "public":
-            public_rooms[room_code] = room
             print(f"[DEBUG] Public Room added to lobby: {room_code}")
             await broadcast_lobby_update()
 
@@ -95,7 +114,8 @@ async def join(
 
         room = rooms[room_code]
 
-        if room.is_full():
+        # For private rooms, check max player limit
+        if room.room_type == "private" and room.is_full():
             print(f"[DEBUG] Join Failed: Room {room_code} is full")
             return RedirectResponse(url=f"/?error=full&code={room_code}", status_code=303)
 
@@ -525,7 +545,7 @@ async def get_game(request: Request, room_id: str = Cookie(None), username: str 
 
 
 async def broadcast_lobby_update():
-    """Sends current public rooms to all users in the lobby."""
+    """Sends current public rooms to all users in the lobby. Only shows rooms in WAITING state."""
     public_list = [
         {
             "room_id": r.room_id,
@@ -534,12 +554,13 @@ async def broadcast_lobby_update():
             "max": r.max_players,
             "status": r.status,
         }
-        for r in rooms.values() if r.room_type == "public" and not r.game_started
+        for r in rooms.values() if r.room_type == "public" and r.status == "LOBBY"
     ]
     for ws in lobby_connections:
         try:
             await ws.send_json({"type": "lobby_update", "rooms": public_list})
-        except:
+        except Exception as e:
+            print(f"[DEBUG] Error sending lobby update: {e}")
             continue
 
 @app.websocket("/ws/lobby")
@@ -753,14 +774,31 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
         is_drawer = (name == manager.game_state["drawer_name"])
         room = rooms[room_id]
         room.remove_player(name)
+        
+        # Check if disconnected player was the host
+        if name == room.host:
+            new_host = room.transfer_host()
+            if new_host:
+                print(f"[DEBUG-BACKEND] Host {name} disconnected. Transferred host role to {new_host}")
+                await manager.broadcast({
+                    "type": "host_transferred",
+                    "new_host": new_host,
+                    "message": f"Host left. {new_host} is now the host."
+                })
+            else:
+                print(f"[DEBUG-BACKEND] Host {name} disconnected. No other players to transfer to.")
 
         if not room.players:
             # delete empty room
+            print(f"[DEBUG-BACKEND] Room {room_id} is now empty. Deleting room.")
             del rooms[room_id]
             if room_id in public_rooms:
                 del public_rooms[room_id]
+        elif is_drawer:
+            # If drawer disconnected and game is running, need to restart
+            await manager.disconnect(websocket)
+        else:
+            await manager.disconnect(websocket)
 
         await broadcast_lobby_update()
-        
-        await manager.disconnect(websocket)
         

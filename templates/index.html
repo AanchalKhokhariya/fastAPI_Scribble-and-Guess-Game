@@ -358,6 +358,11 @@
                     <p style="margin: 12px 0 8px 0; color: var(--text-dim); font-size: 0.85rem;">Share the code with friends or use the link below</p>
                     <button class="btn" onclick="copyInviteLink()" style="width: 100%; margin-top: 8px; background: rgba(59, 130, 246, 0.2); border-color: var(--draw-blue);">🔗 Copy Invite Link</button>
                 </div>
+
+                <div id="public-room-info" class="hidden" style="margin: 20px 0; padding: 16px; background: rgba(34, 197, 94, 0.1); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <p style="margin: 0; color: var(--success); font-size: 0.9rem; font-weight: 600;">🌐 PUBLIC ROOM</p>
+                    <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 0.85rem;">Anyone can join this room directly from the lobby</p>
+                </div>
                 
                 <div id="host-controls" class="hidden" style="margin-top: 20px;">
                     <p style="color: var(--text-dim); font-size: 0.9rem;">You are the Host</p>
@@ -368,7 +373,7 @@
                 </div>
                 
                 <div id="guest-waiting" class="hidden">
-                    <p style="animation: blink 1.5s infinite;">Waiting for host to start...</p>
+                    <p style="animation: blink 1.5s infinite;" id="guest-waiting-text">Waiting for host to start...</p>
                 </div>
             </div>
                 <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
@@ -547,6 +552,22 @@
                     setTimeout(() => toast.remove(), 500);
                 }, 5000);
             }
+            
+            if (data.type === "host_transferred") {
+                showToast(`👑 ${data.new_host} is now the host!`);
+                
+                // Update host controls visibility
+                if (myName === data.new_host && currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] I am now the host!`);
+                    document.getElementById('host-controls').classList.remove('hidden');
+                    document.getElementById('guest-waiting').classList.add('hidden');
+                } else if (myName !== data.new_host && currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] Someone else is now the host.`);
+                    document.getElementById('host-controls').classList.add('hidden');
+                    document.getElementById('guest-waiting').classList.remove('hidden');
+                    document.getElementById('guest-waiting-text').innerText = `Waiting for ${data.new_host} to start...`;
+                }
+            }
             if (data.type === "init") {
                 console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}, room_type=${data.room_type}, selection_active=${data.selection_active}, movie_set=${data.movie_set}`);
                 currentMaxPlayers = data.max_players;
@@ -581,8 +602,11 @@
                         const roomCode = getCookie("room_id");
                         document.getElementById('room-info').classList.remove('hidden');
                         document.getElementById('room-code-display').innerText = roomCode || "LOADING...";
+                        document.getElementById('public-room-info').classList.add('hidden');
                     } else {
+                        // Public room - show public room info
                         document.getElementById('room-info').classList.add('hidden');
+                        document.getElementById('public-room-info').classList.remove('hidden');
                     }
                     
                     if (myName === data.host_name) {
@@ -594,6 +618,7 @@
                         console.log(`[DEBUG-FRONTEND] Current player is GUEST. Waiting for host to start.`);
                         document.getElementById('host-controls').classList.add('hidden');
                         document.getElementById('guest-waiting').classList.remove('hidden');
+                        document.getElementById('guest-waiting-text').innerText = `Waiting for ${data.host_name} to start...`;
                     }
                 } else {
                     console.log(`[DEBUG-FRONTEND] Room is PLAYING. Hiding lobby area.`);
