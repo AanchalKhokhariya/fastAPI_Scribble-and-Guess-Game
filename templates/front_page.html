@@ -3,21 +3,248 @@
 <head>
     <title>Scribble Game - Join</title>
     <style>
-        body { margin: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: #faf8f8; font-family: 'Arial', sans-serif; }
-        .name-input { padding: 15px; font-size: 18px; border: 2px solid #ddd; border-radius: 10px; margin-bottom: 20px; width: 250px; text-align: center; }
-        .start-btn { padding: 20px 40px; font-size: 24px; color: white; background-color: #ff4757; border-radius: 50px; border: none; cursor: pointer; transition: 0.2s; }
-        .start-btn:hover { background-color: #ff6b81; transform: scale(1.1); }
+        :root {
+            --primary: #ff4757;
+            --primary-hover: #ff6b81;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+        }
+        body { 
+            margin: 0; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+            color: var(--text);
+        }
+        .login-card {
+            background: var(--card);
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        h1 { font-size: 2rem; margin-bottom: 1.5rem; letter-spacing: -0.025em; }
+        .name-input { 
+            padding: 16px 20px; 
+            font-size: 18px; 
+            border: 2px solid #334155; 
+            border-radius: 12px; 
+            margin-bottom: 24px; 
+            width: 280px; 
+            text-align: center; 
+            background: #0f172a;
+            color: white;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .name-input:focus { border-color: var(--primary); }
+        .start-btn { 
+            padding: 16px 48px; 
+            font-size: 20px; 
+            font-weight: bold;
+            color: white; 
+            background-color: var(--primary); 
+            border-radius: 12px; 
+            border: none; 
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .start-btn:hover { 
+            background-color: var(--primary-hover); 
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(255, 71, 87, 0.4);
+        }
     </style>
 </head>
 <body>
-    <input type="text" id="playerName" class="name-input" placeholder="Enter Your Name">
-    <button onclick="startGame()" class="start-btn">START GAME</button>
-    <script>
-        function startGame() {
-            const name = document.getElementById('playerName').value.trim();
-            if (!name) { alert("Please enter your name!"); return; }
-            window.location.href = `/game?name=${encodeURIComponent(name)}`;
+    <div class="login-card">
+        <h1>🎬 Movie Guess</h1>
+        <div id="error-box" style="
+            display:none;
+            background: rgba(255, 71, 87, 0.15);
+            color: #ff6b81;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        "></div>
+
+        <form action="/join" method="POST" id="gameForm">
+            <input type="text" name="name" class="name-input" placeholder="Enter Your Name" required>
+
+            <input type="hidden" name="action" id="actionInput" value="create">
+            <input type="hidden" name="room_type" id="roomTypeInput" value="private">
+            <input type="hidden" name="max_players" id="maxPlayersInput" value="4">
+
+            <div id="room-mode-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; justify-content: center;">
+                <button type="button" class="start-btn" onclick="prepareCreate('private')" style="flex: 1;">Create Private Room</button>
+                <button type="button" class="start-btn" onclick="prepareCreate('public')" style="flex: 1; background: #22c55e;">Create Public Room</button>
+                <button type="button" class="start-btn" onclick="toggleJoinUI()" style="flex: 1; background: #334155;">Join Room</button>
+            </div>
+
+            <div id="join-section" style="display: none; margin-bottom: 20px;">
+                <input type="text" name="room_code" id="roomInput" class="name-input" placeholder="6-Digit Code" maxlength="6" style="text-transform: uppercase;">
+            </div>
+
+            <div id="public-settings" style="display: none; margin-bottom: 20px; text-align: left;">
+                <label for="maxPlayers" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
+                    Max Players: <span id="max-players-display" style="color: var(--primary); font-weight: bold;">4</span>
+                </label>
+                <input type="range" name="max_players" id="maxPlayers" min="2" max="6" value="4" 
+                    style="width: 100%; accent-color: var(--primary);"
+                    oninput="setMaxPlayers(this.value)">
+            </div>
+
+            <div id="timer-selection" style="margin-bottom: 20px;">
+                <label for="duration" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
+                    Round Duration: <span id="duration-val" style="color: var(--primary); font-weight: bold;">5</span> Minutes
+                </label>
+                <input type="range" name="duration" id="duration" min="1" max="10" value="5" 
+                    style="width: 100%; accent-color: var(--primary);"
+                    oninput="document.getElementById('duration-val').innerText = this.value">
+            </div>
+
+            <div id="button-container" style="display: flex; gap: 10px; flex-direction: column;">
+                <button type="submit" id="submitBtn" class="start-btn">Create Private Room</button>
+            </div>
+        </form>
+    </div>
+    <div id="public-lobby" style="margin-top: 30px; border-top: 1px solid #334155; padding-top: 20px; width: 100%; max-width: 600px;">
+        <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 1.2rem;">🌐 Public Rooms Lobby</h3>
+        <div id="room-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <p style="color: var(--text-dim); text-align: center; padding: 20px;">Looking for active games...</p>
+        </div>
+    </div>
+
+<script>
+    function prepareCreate(type) {
+        document.getElementById('actionInput').value = 'create';
+        document.getElementById('roomTypeInput').value = type;
+        document.getElementById('join-section').style.display = 'none';
+        document.getElementById('roomInput').required = false;
+        document.getElementById('timer-selection').style.display = 'block';
+
+        if (type === 'public') {
+            document.getElementById('public-settings').style.display = 'block';
+            document.getElementById('submitBtn').innerText = 'Create Public Room';
+        } else {
+            document.getElementById('public-settings').style.display = 'none';
+            document.getElementById('submitBtn').innerText = 'Create Private Room';
         }
-    </script>
+    }
+
+    function toggleJoinUI(prefillCode) {
+        document.getElementById('actionInput').value = 'join';
+        document.getElementById('roomTypeInput').value = 'private';
+        document.getElementById('join-section').style.display = 'block';
+        document.getElementById('public-settings').style.display = 'none';
+        document.getElementById('timer-selection').style.display = 'none';
+        document.getElementById('submitBtn').innerText = 'Join Room';
+        document.getElementById('roomInput').required = true;
+        if (prefillCode) {
+            document.getElementById('roomInput').value = prefillCode;
+        }
+    }
+
+    function setMaxPlayers(value) {
+        document.getElementById('maxPlayersInput').value = value;
+        document.getElementById('max-players-display').innerText = value;
+    }
+
+    function joinPublic(code) {
+        document.getElementById('roomInput').value = code;
+        toggleJoinUI();
+        document.getElementById('roomInput').focus();
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    const inviteCode = params.get("invite");
+
+    if (error) {
+        const errorBox = document.getElementById("error-box");
+        errorBox.style.display = "block";
+
+        if (error === "name_taken") {
+            errorBox.innerText = "⚠️ Username already exists in this room. Try another name.";
+        } 
+        else if (error === "not_found") {
+            errorBox.innerText = "❌ Room not found. Check your code.";
+        } 
+        else if (error === "missing_code") {
+            errorBox.innerText = "⚠️ Please enter a room code.";
+        } 
+        else {
+            errorBox.innerText = "Something went wrong.";
+        }
+    }
+    
+    // If there's an invite code in the URL, pre-fill and show the join UI
+    if (inviteCode) {
+        document.getElementById('actionInput').value = 'join';
+        document.getElementById('join-section').style.display = 'block';
+        document.getElementById('roomInput').value = inviteCode.toUpperCase();
+        document.getElementById('roomInput').required = true;
+        document.getElementById('submitBtn').innerText = 'Join Room';
+        document.getElementById('public-settings').style.display = 'none';
+        document.getElementById('timer-selection').style.display = 'none';
+    }
+    const lobbyWs = new WebSocket(`ws://${window.location.host}/ws/lobby`);
+    
+    lobbyWs.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "lobby_update") {
+            const list = document.getElementById('room-list');
+            list.innerHTML = "";
+            if (data.rooms.length === 0) {
+                list.innerHTML = "<p style='text-align: center; color: var(--text-dim); padding: 20px;'>No public rooms available. Create one!</p>";
+            } else {
+                data.rooms.forEach(room => {
+                    const row = document.createElement('div');
+                    const playersFull = room.count >= room.max ? "🔴 Full" : "🟢 Waiting";
+                    const progressPercent = Math.round((room.count / room.max) * 100);
+                    row.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; gap: 12px;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <span style="font-weight: 700; color: var(--primary);">${room.room_id}</span>
+                                    <span style="font-size: 0.85rem; background: ${room.count >= room.max ? '#ef4444' : '#22c55e'}; color: white; padding: 2px 8px; border-radius: 6px; white-space: nowrap;">${playersFull}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px;">
+                                    <span>Host: <strong>${room.host}</strong></span>
+                                    <span>Players: <strong>${room.count}/${room.max}</strong></span>
+                                </div>
+                                <div style="width: 100%; height: 6px; background: #334155; border-radius: 3px; overflow: hidden;">
+                                    <div style="height: 100%; width: ${progressPercent}%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.2s;"></div>
+                                </div>
+                            </div>
+                            <button onclick="joinPublic('${room.room_id}')" class="btn" style="padding: 10px 16px; white-space: nowrap; background: var(--draw-blue); border-color: var(--draw-blue); font-weight: 700;">Join →</button>
+                        </div>
+                    `;
+                    list.appendChild(row);
+                });
+            }
+        }
+    };
+
+    lobbyWs.onerror = (event) => {
+        console.error("[DEBUG] Lobby WebSocket error:", event);
+    };
+
+    lobbyWs.onclose = () => {
+        console.log("[DEBUG] Lobby WebSocket disconnected");
+    };
+
+</script>
 </body>
 </html>

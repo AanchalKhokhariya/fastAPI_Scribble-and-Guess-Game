@@ -3,216 +3,865 @@
 <head>
     <title>Movie Guessing Game</title>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; background: #fafafa; margin: 0; padding: 20px; }
-        #canvas { border: 2px solid #555; background: #fff; cursor: crosshair; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        :root {
+            --bg: #0f172a;
+            --sidebar-bg: #1e293b;
+            --accent: #ff4757;
+            --accent-soft: rgba(255, 71, 87, 0.1);
+            --draw-blue: #3b82f6;
+            --success: #22c55e;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+            background: var(--bg);
+            color: var(--text-main);
+        }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            padding: 12px 16px;
+            background: var(--sidebar-bg);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        header h1 {
+            font-size: 1.4rem;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        #sidebar-toggle {
+            display: none;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .main-container {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            padding: 16px;
+            text-align: left;
+            overflow-y: auto;
+            min-height: 0;
+            transition: transform 0.25s ease;
+        }
+        #sidebar.open-mobile {
+            transform: translateX(0);
+        }
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            transition: background 0.2s;
+            word-break: break-word;
+        }
+        .player-name { font-weight: 600; font-size: 0.95rem; }
+        .player-score {
+            background: var(--accent);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .is-me { border: 2px solid var(--draw-blue); background: rgba(59, 130, 246, 0.12); }
+        #content {
+            flex: 1;
+            padding: 16px;
+            min-width: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        #status-bar { font-size: 1rem; margin-bottom: 8px; font-weight: 500; }
+        #timer-display, #selection-timer-display {
+            font-size: 1rem;
+            color: var(--accent);
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: var(--accent-soft);
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            white-space: nowrap;
+        }
+        #canvas {
+            background: #ffffff;
+            cursor: crosshair;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            touch-action: none;
+        }
+        .toolbar {
+            width: 100%;
+            margin-bottom: 12px;
+            background: var(--sidebar-bg);
+            padding: 12px;
+            border-radius: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            border: 1px solid rgba(255,255,255,0.15);
+            flex-wrap: wrap;
+        }
+        .btn, .btn-restart, #sidebar-toggle {
+            padding: 10px 14px;
+            cursor: pointer;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #0f172a;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+            min-height: 42px;
+            touch-action: manipulation;
+        }
+        .btn:hover, .btn-restart:hover {
+            background: #334155;
+        }
+        .active-tool { background: var(--draw-blue); border-color: var(--draw-blue); }
+        .box-container {
+            margin: 16px auto;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-width: 90%;
+        }
+        .letter-input {
+            width: 42px;
+            height: 52px;
+            font-size: 24px;
+            text-align: center;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            background: #1e293b;
+            color: white;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+        .letter-input:focus { border-color: var(--draw-blue); outline: none; }
+        .letter-input:disabled { background: #0f172a; border-color: transparent; color: var(--text-dim); }
+        #congrats-area {
+            margin-bottom: 16px;
+            padding: 16px;
+            background: rgba(34, 197, 94, 0.15);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 950px;
+            border: 1px solid var(--success);
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        #congrats-text { font-size: 1.2rem; color: var(--success); font-weight: 800; }
+        .btn-restart {
+            background: var(--success);
+            color: white;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            padding: 11px 18px;
+            cursor: pointer;
+            border-radius: 10px;
+            margin-top: 12px;
+            min-width: 140px;
+        }
+        #colorPicker {
+            width: 42px;
+            height: 42px;
+            border: none;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+        }
         .hidden { display: none !important; }
-        .toolbar { margin-bottom: 15px; display: flex; justify-content: center; align-items: center; gap: 15px; }
-        .btn { padding: 10px 20px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-weight: bold; }
-        .active-tool { background: #2196F3; color: white; border-color: #2196F3; }
-        .box-container { margin: 25px auto; display: flex; justify-content: center; flex-wrap: wrap; }
-        .letter-input { width: 45px; height: 55px; font-size: 28px; text-align: center; margin: 5px; border: 2px solid #bbb; border-radius: 6px; text-transform: uppercase; font-weight: bold; }
-        .space { width: 35px; }
-        #congrats-area { margin: 20px; padding: 20px; background: #e8f5e9; border-radius: 10px; display: none; }
-        #congrats-text { font-size: 30px; color: #2ecc71; font-weight: bold; }
-        #movie-reveal { font-size: 24px; color: #333; font-weight: bold; margin-bottom: 15px; }
-        #status-bar { font-size: 22px; color: #555; margin: 15px; font-weight: bold; }
-        #timer-display { font-size: 24px; color: #ff4757; font-weight: bold; margin: 10px; }
-        .timer-low { color: #eb4d4b !important; animation: blink 1s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        .btn-restart { background: #4CAF50; color: white; border: none; font-size: 18px; padding: 12px 30px; cursor: pointer; border-radius: 50px; }
-        #colorPicker { width: 50px; height: 40px; border: none; cursor: pointer; padding: 0; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .space {
+            width: 35px;
+            height: 52px;
+            display: inline-block;
+        }
+        #toast-container {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            right: 14px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .toast {
+            background: #ef4444;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            margin-top: 10px;
+            font-weight: 600;
+            animation: slideIn 0.3s ease-out;
+            pointer-events: auto;
+        }
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        #history-modal {
+            transition: transform 0.3s ease;
+            transform: translateX(100%);
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            background: #1e293b;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 18px;
+            overflow-y: auto;
+            z-index: 9999;
+            box-sizing: border-box;
+        }
+        #history-modal:not(.hidden) { transform: translateX(0); }
+        #history-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 9998;
+        }
+        @media (max-width: 1024px) {
+            .main-container { flex-direction: column; }
+            #sidebar {
+                width: 100%;
+                border-right: none;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                max-height: 240px;
+            }
+            #content { padding: 12px; }
+            #canvas { max-height: 45vh; }
+            .toolbar { gap: 6px; padding: 10px; }
+            .btn, .btn-restart { font-size: 0.92rem; }
+            header h1 { font-size: 1.2rem; }
+        }
+        @media (max-width: 768px) {
+            header { padding: 10px; }
+            #sidebar-toggle { display: inline-flex; }
+            #sidebar { position: fixed; left: 0; top: 54px; width: 72%; max-width: 280px; height: calc(100% - 54px); transform: translateX(-105%); z-index: 200; }
+            #sidebar.open-mobile { transform: translateX(0); }
+            #sidebar.hidden-mobile { transform: translateX(-105%); }
+            .main-container { padding-top: 0; }
+            #content { padding: 10px; }
+            #canvas { max-height: 35vh; }
+            .box-container { gap: 6px; }
+            .letter-input { width: 38px; height: 50px; font-size: 22px; }
+            .space { width: 32px; height: 50px; }
+            #history-modal { width: 100%; }
+            #history-modal:not(.hidden) { transform: translateX(0); }
+            #timer-display, #selection-timer-display { font-size: 0.95rem; padding: 6px 12px; }
+            #header-right { width: 100%; justify-content: flex-end; }
+        }
     </style>
 </head>
 <body>
-    <h1>🎬 Movie Guessing Game</h1>
-    <p id="player-welcome">Connecting...</p>
-    <div id="status-bar"><span id="drawer-status">Connecting...</span></div>
-    
-    <div id="timer-display" class="hidden">Time Left: <span id="time-left">05:00</span></div>
+    <div id="toast-container"></div>
+    <header>
+        <h1>🎬 Movie Guess</h1>
+        <div id="header-right">
+            <button id="sidebar-toggle" onclick="toggleSidebar()">👥 Players</button>
+            <div style="text-align: right; min-width: 165px;">
+                <p id="round-display" style="margin: 0; font-weight: bold; color: var(--success);">ROUND: 1</p>
+                <p id="room-display" style="margin: 0; font-weight: bold; color: var(--accent);">ROOM: {{ room_code }}</p>
+                <p id="player-welcome" style="margin: 0; font-size: 0.8rem; color: var(--text-dim);">{{ username }}</p>
+            </div>
+            <button onclick="toggleHistory()" class="btn">📜 History</button>
+            <button onclick="leaveGame()" class="btn" style="background: #ef4444; border: none;">Leave</button>
+        </div>
+    </header>
+    <div id="disconnect-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); color: white; z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <h1 style="font-size: 4rem; margin-bottom: 0;">🚫</h1>
+        <h2>Connection Lost</h2>
+        <button class="btn" onclick="location.href='http://127.0.0.1:8000/'" style="background: var(--accent); border: none; padding: 15px 30px;">Try Reconnecting</button>
+    </div>
+    <div class="main-container">
+        <div id="sidebar">
+            <div class="sidebar-title">Leaderboard</div>
+            <div class="sidebar-status" style="margin-bottom: 12px; color: var(--text-main); font-weight: 600; font-size: 0.95rem;">
+                Drawer: <span id="sidebar-drawer">Waiting...</span>
+            </div>
+            <div id="player-list"></div>
+        </div>
+        <div id="content">
+            <div id="status-bar"><span id="drawer-status">Waiting for game...</span></div>
+            <div id="timer-display" class="hidden">⏱️ <span id="time-left">05:00</span></div>
+            <div id="selection-timer-display" class="hidden">🕒 <span id="selection-time-left">01:00</span></div>
+            <div id="setup-area">
+                <div id="lobby-waiting-area" class="hidden" style="text-align: center; padding: 40px; background: var(--sidebar-bg); border-radius: 20px;">
+                <h2 style="color: var(--success);">🎮 In Lobby</h2>
+                <p id="lobby-count-text">Waiting for players ...</p>
+                
+                <div id="room-info" class="hidden" style="margin: 20px 0; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <p style="margin: 0 0 12px 0; color: var(--text-dim); font-size: 0.9rem;">PRIVATE ROOM CODE</p>
+                    <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
+                        <div style="background: #0f172a; padding: 12px 24px; border-radius: 8px; border: 2px solid var(--draw-blue); font-weight: 800; font-size: 1.3rem; letter-spacing: 2px;" id="room-code-display"></div>
+                        <button class="btn" onclick="copyRoomCode()" style="padding: 12px 16px; background: var(--draw-blue); border: none;">📋 Copy</button>
+                    </div>
+                    <p style="margin: 12px 0 8px 0; color: var(--text-dim); font-size: 0.85rem;">Share the code with friends or use the link below</p>
+                    <button class="btn" onclick="copyInviteLink()" style="width: 100%; margin-top: 8px; background: rgba(59, 130, 246, 0.2); border-color: var(--draw-blue);">🔗 Copy Invite Link</button>
+                </div>
 
-    <div id="setup-area">
-        <h3 id="role-display">Determining Role...</h3>
-        <div id="drawer-input" class="hidden">
-            <input type="text" id="movieInput" placeholder="Enter movie title...">
-            <button class="btn active-tool" onclick="sendMovie()">Start Round</button>
+                <div id="public-room-info" class="hidden" style="margin: 20px 0; padding: 16px; background: rgba(34, 197, 94, 0.1); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <p style="margin: 0; color: var(--success); font-size: 0.9rem; font-weight: 600;">🌐 PUBLIC ROOM</p>
+                    <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 0.85rem;">Anyone can join this room directly from the lobby</p>
+                </div>
+                
+                <div id="host-controls" class="hidden" style="margin-top: 20px;">
+                    <p style="color: var(--text-dim); font-size: 0.9rem;">You are the Host</p>
+                    <button class="start-btn" onclick="hostStartGame()" style="background: var(--success); width: auto; padding: 15px 40px;">
+                        START GAME
+                    </button>
+                    <div id="start-error" class="hidden" style="margin-top: 12px; padding: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 8px; color: #fca5a5; font-size: 0.9rem;"></div>
+                </div>
+                
+                <div id="guest-waiting" class="hidden">
+                    <p style="animation: blink 1.5s infinite;" id="guest-waiting-text">Waiting for host to start...</p>
+                </div>
+            </div>
+                <h3 id="role-display" style="color: var(--text-dim);">Determining Role...</h3>
+                <div id="drawer-input" class="hidden">
+                    <div style="margin: 10px 0;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="hintToggle" checked style="transform: scale(1.3);">
+                            <span>Show Vowel Hints</span>
+                        </label>
+                    </div>
+                    <select id="sectionSelect" style="padding: 10px; border-radius: 8px; background: #1e293b; color: white; border: 1px solid #334155;">
+                        <option value="Hollywood">Hollywood 🇺🇸</option>
+                        <option value="Bollywood">Bollywood 🇮🇳</option>
+                    </select>
+                    <input type="text" id="movieInput" placeholder="Enter movie title..." style="padding: 12px; width: 200px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 10px;">
+                    <div>
+                        <button class="btn active-tool" onclick="sendMovie()">Start Game</button>
+                        <button class="btn" onclick="generateMovie()">🎲 Random</button>
+                        <div id="movie-options" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="game-area" class="hidden">
+                <div id="congrats-area" style="display: none;">
+                    <div id="congrats-text"></div>
+                    <div id="movie-reveal" class="hidden">The movie was: <span id="revealed-name" style="color: var(--accent);"></span></div>
+                    <button class="btn-restart" onclick="requestRestart()">Next Round</button>
+                </div>
+                <h2 id="drawer-movie" style="color: var(--draw-blue); margin: 0 0 10px 0;"></h2>
+                <div id="controls" class="toolbar hidden">
+                    <button id="drawBtn" class="btn active-tool" onclick="setTool('draw')">✏️ Pencil</button>
+                    <button id="eraseBtn" class="btn" onclick="setTool('erase')">🧽 Eraser</button>
+                    <input type="color" id="colorPicker" value="#333333" title="Choose color">
+                    <button class="btn" onclick="clearCanvasSync()">🗑️ Clear</button>
+                </div>
+                <canvas id="canvas" width="800" height="500"></canvas>
+                <div id="movie-display" class="box-container"></div>
+            </div>
         </div>
     </div>
-
-    <div id="game-area" class="hidden">
-        <div id="congrats-area">
-            <div id="congrats-text"></div>
-            <div id="movie-reveal" class="hidden">The movie was: <span id="revealed-name" style="color: #ff4757;"></span></div>
-            <button class="btn-restart" onclick="requestRestart()">Next Round</button>
-        </div>
-        <div id="movie-display" class="box-container"></div>
-        
-        <div id="controls" class="toolbar hidden">
-            <button id="drawBtn" class="btn active-tool" onclick="setTool('draw')">✏️ Pencil</button>
-            <button id="eraseBtn" class="btn" onclick="setTool('erase')">🧽 Eraser</button>
-            <input type="color" id="colorPicker" value="#333333" title="Choose color">
-            <button class="btn" onclick="clearCanvasSync()">🗑️ Clear</button>
-        </div>
-        
-        <canvas id="canvas" width="850" height="500"></canvas>
-    </div>
-
     <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const myName = urlParams.get('name') || "Anonymous";
-        document.getElementById('player-welcome').innerText = "Playing as: " + myName;
-
-        let protocol = location.protocol === "https:" ? "wss" : "ws";
-        let ws = new WebSocket(`${protocol}://${location.host}/ws/${encodeURIComponent(myName)}`);
+        let currentRound = 0;
+        function getCookie(name) {
+            let value = `; ${document.cookie}`;
+            let parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+        // This removes the surrounding double quotes and decodes any URL-encoded spaces
+        let myName = decodeURIComponent(getCookie("username") || "Anonymous").replace(/^"|"$/g, '');
+        const currentRoom = getCookie("room_id");
+        console.log(`[DEBUG-FRONTEND] Page loaded. Username: ${myName}, Room: ${currentRoom}`);
+        document.getElementById('room-display').innerText = "ROOM: " + currentRoom;
+        let protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        let ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
         let canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
         let myRole = "", targetMovie = "", drawing = false, currentTool = "draw";
         let countdownInterval = null;
-        let timeLeft = 300; 
+        let timeLeft = 0; 
+        let previousScores = {};
+        let currentMaxPlayers = 6;  // Default, will be updated from init
+        let currentRoomStatus = null;  // Will be updated from init
+        let currentRoomType = "private";  // Will be updated from init
+        
+        function copyRoomCode() {
+            const roomCode = getCookie("room_id");
+            if (roomCode) {
+                navigator.clipboard.writeText(roomCode).then(() => {
+                    showToast("✅ Room code copied!");
+                });
+            }
+        }
+        
+        function copyInviteLink() {
+            const roomCode = getCookie("room_id");
+            if (roomCode) {
+                const inviteLink = `${window.location.origin}/?invite=${roomCode}`;
+                navigator.clipboard.writeText(inviteLink).then(() => {
+                    showToast("✅ Invite link copied!");
+                });
+            }
+        }
+        
+        console.log(`[DEBUG-FRONTEND] WebSocket connecting to /ws`);
         ws.onmessage = (event) => {
             let data = JSON.parse(event.data);
-            if (data.type === "drawer_disconnected") {
-                alert("The Drawer has left the game. Redirecting...");
-                window.location.href = "/";
+            console.log(`[DEBUG-FRONTEND] WS message received:`, data);
+            if (data.type === "history_update") {
+                movieHistory = data.history;
+                renderHistory();
+            }
+            if (data.type === "error") {
+                console.log(`[DEBUG-FRONTEND] Error from server: ${data.message}`);
+                const errorDiv = document.getElementById('start-error');
+                if (errorDiv && currentRoomStatus === "LOBBY") {
+                    errorDiv.innerText = "❌ " + data.message;
+                    errorDiv.classList.remove('hidden');
+                }
+                showToast("⚠️ " + data.message);
                 return;
             }
-
+            if (data.type === "player_list") {
+                console.log(`[DEBUG-FRONTEND] player_list update: ${data.players.length} players, room_status=${currentRoomStatus}`);
+                data.players.forEach(p => {
+                    if (previousScores[p.name] !== undefined && p.score > previousScores[p.name]) {
+                        const pointsGained = p.score - previousScores[p.name];
+                        const displayName = (p.name === myName) ? "You" : p.name;
+                        showToast(`🎉 ${displayName} gained ${pointsGained} points!`);
+                    }
+                    previousScores[p.name] = p.score;
+                });
+                window.lastPlayerData = data.players; 
+                updatePlayerList(data.players);
+                
+                // Update lobby count and clear error if we're in LOBBY mode
+                if (currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] Updating lobby count to ${data.players.length}/${currentMaxPlayers}`);
+                    document.getElementById('lobby-count-text').innerText = `Waiting for players ...`;
+                    // Clear error if 2+ players now
+                    if (data.players.length >= 2) {
+                        document.getElementById('start-error').classList.add('hidden');
+                    }
+                }
+            }
+            if (data.type === "movie_options") {
+                showMovieOptions(data.options);
+            }
+            if (data.type === "drawer_disconnected") {
+                showToast(`⚠️ Drawer (${data.name}) has left. Selecting new drawer...`);
+            }
+            if (data.type === "timer_update" && data.timer_type === "selection") {
+                console.log('[DEBUG] selection timer update', data.time_left, 'drawer', data.drawer_name, 'role', myRole);
+                startSelectionTimer(data.time_left);
+            }
+            if (data.type === "timer_update" && data.timer_type === "round") {
+                console.log('[DEBUG] round timer update', data.time_left, 'drawer', data.drawer_name, 'role', myRole);
+                startTimer(data.time_left);
+            }
+            if (data.type === "new_drawer") {
+                const newDrawer = data.drawer_name;
+                if (newDrawer === myName) {
+                    myRole = "drawer";
+                    document.getElementById('role-display').innerText = "Role: DRAWER";
+                    document.getElementById('drawer-input').classList.remove('hidden');
+                    document.getElementById('controls').classList.remove('hidden');
+                    showToast(`🧩 You are now the drawer. Pick a movie in 60 seconds.`);
+                    startSelectionTimer(60);
+                } else {
+                    myRole = "guesser";
+                    document.getElementById('role-display').innerText = "Role: GUESSER";
+                    document.getElementById('drawer-input').classList.add('hidden');
+                    document.getElementById('controls').classList.add('hidden');
+                    showToast(`🎬 New drawer is ${newDrawer}. Wait for them to choose a movie.`);
+                    stopSelectionTimer();
+                }
+                updateDrawerStatus(newDrawer);
+                document.getElementById('setup-area').classList.remove('hidden');
+                document.getElementById('game-area').classList.add('hidden');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            if (data.type === "movie_options") {
+                showMovieOptions(data.options);
+            }
+            if (data.type === "movie_selected") {
+                showToast(`✅ Movie picked by drawer. Round is starting...`);
+                stopSelectionTimer();
+            }
+            function showToast(message) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.innerText = message;
+                container.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = '0.5s';
+                    setTimeout(() => toast.remove(), 500);
+                }, 5000);
+            }
+            
+            if (data.type === "host_transferred") {
+                showToast(`👑 ${data.new_host} is now the host!`);
+                
+                // Update host controls visibility
+                if (myName === data.new_host && currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] I am now the host!`);
+                    document.getElementById('host-controls').classList.remove('hidden');
+                    document.getElementById('guest-waiting').classList.add('hidden');
+                } else if (myName !== data.new_host && currentRoomStatus === "LOBBY") {
+                    console.log(`[DEBUG-FRONTEND] Someone else is now the host.`);
+                    document.getElementById('host-controls').classList.add('hidden');
+                    document.getElementById('guest-waiting').classList.remove('hidden');
+                    document.getElementById('guest-waiting-text').innerText = `Waiting for ${data.new_host} to start...`;
+                }
+            }
             if (data.type === "init") {
-                myRole = data.role; 
-                targetMovie = "";
-                stopTimer(); 
+                console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}, room_type=${data.room_type}, selection_active=${data.selection_active}, movie_set=${data.movie_set}`);
+                currentMaxPlayers = data.max_players;
+                if (data.room_status !== undefined) {
+                    currentRoomStatus = data.room_status;
+                }
+                if (data.room_type !== undefined) {
+                    currentRoomType = data.room_type;
+                }
+                
+                // Determine if we're in LOBBY or PLAYING state
+                // LOBBY: room_status is explicitly "LOBBY" OR not set and we're waiting
+                // PLAYING: room_status is explicitly "PLAYING" OR we have selection/game active
+                const isGameStarted = data.selection_active || data.movie_set || (currentRoomStatus === "PLAYING");
+                const isInLobby = currentRoomStatus === "LOBBY" && !isGameStarted;
+                
+                if (isInLobby) {
+                    console.log(`[DEBUG-FRONTEND] Room is in LOBBY. Showing waiting area.`);
+                    document.getElementById('setup-area').classList.remove('hidden'); // ✅ FIX: Make sure parent container is visible
+                    document.getElementById('lobby-waiting-area').classList.remove('hidden');
+                    document.getElementById('game-area').classList.add('hidden');
+                    document.getElementById('drawer-input').classList.add('hidden');
+                    document.getElementById('controls').classList.add('hidden');
+                    document.getElementById('role-display').style.display = 'none'; // Optional: hide role text while in lobby
+
+                    if (data.player_count !== undefined) {
+                        document.getElementById('lobby-count-text').innerText = `Waiting for players...`;
+                    }
+                    
+                    // Show room info for private rooms
+                    if (data.room_type === "private") {
+                        const roomCode = getCookie("room_id");
+                        document.getElementById('room-info').classList.remove('hidden');
+                        document.getElementById('room-code-display').innerText = roomCode || "LOADING...";
+                        document.getElementById('public-room-info').classList.add('hidden');
+                    } else {
+                        // Public room - show public room info
+                        document.getElementById('room-info').classList.add('hidden');
+                        document.getElementById('public-room-info').classList.remove('hidden');
+                    }
+                    
+                    if (myName === data.host_name) {
+                        console.log(`[DEBUG-FRONTEND] Current player is HOST. Showing start button.`);
+                        document.getElementById('host-controls').classList.remove('hidden');
+                        document.getElementById('guest-waiting').classList.add('hidden');
+                        document.getElementById('start-error').classList.add('hidden');
+                    } else {
+                        console.log(`[DEBUG-FRONTEND] Current player is GUEST. Waiting for host to start.`);
+                        document.getElementById('host-controls').classList.add('hidden');
+                        document.getElementById('guest-waiting').classList.remove('hidden');
+                        document.getElementById('guest-waiting-text').innerText = `Waiting for ${data.host_name} to start...`;
+                    }
+                } else {
+                    console.log(`[DEBUG-FRONTEND] Room is PLAYING. Hiding lobby area.`);
+                    document.getElementById('lobby-waiting-area').classList.add('hidden');
+                }
+                if (data.history_movies) {
+                    movieHistory = data.history_movies;
+                    renderHistory();
+                }
+                if (data.round_number) {
+                    currentRound = data.round_number;
+                    document.getElementById('round-display').innerText = "ROUND: " + currentRound;
+                }
+                myRole = data.role; targetMovie = "";
+                stopTimer();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
-                document.getElementById('revealed-name').innerText = "";
-                document.getElementById('role-display').innerText = "Your Role: " + myRole.toUpperCase();
-                
+                document.getElementById('role-display').innerText = "Role: " + myRole.toUpperCase();
                 if (myRole === "drawer") {
-                    document.getElementById('drawer-input').classList.remove('hidden');
-                    document.getElementById('controls').classList.remove('hidden');
+                    if (!isInLobby) {
+                        document.getElementById('drawer-input').classList.remove('hidden');
+                        document.getElementById('controls').classList.remove('hidden');
+                    }
                 } else {
                     document.getElementById('drawer-input').classList.add('hidden');
                     document.getElementById('controls').classList.add('hidden');
                 }
-
                 updateDrawerStatus(data.drawer_name);
-
+                if (data.selection_active && myRole === "drawer") {
+                    console.log(`[DEBUG-FRONTEND] Drawer in selection phase. Starting timer.`);
+                    startSelectionTimer(data.selection_time_left || 60);
+                    document.getElementById('setup-area').classList.remove('hidden');
+                    document.getElementById('game-area').classList.add('hidden');
+                } else {
+                    stopSelectionTimer();
+                }
                 if (data.history) {
                     data.history.forEach(step => {
                         if (step.isNewPath) ctx.beginPath();
                         draw(step.x, step.y, step.tool, step.color);
                     });
                 }
-
+                if (data.time_left > 0 && data.movie_set) {
+                    startTimer(data.time_left);
+                }
                 if (data.winner_msg) showAnnouncement(data.winner_msg, data.revealed);
-                if (data.movie_set) setupGameUI(data.display, data.full_movie);
-                else {
+                if (data.movie_set) {
+                    console.log(`[DEBUG-FRONTEND] Movie set by drawer. Setting up game UI.`);
+                    setupGameUI(data.display, data.full_movie);
+                } else if (!isInLobby) {
                     document.getElementById('setup-area').classList.remove('hidden');
                     document.getElementById('game-area').classList.add('hidden');
                 }
             }
-            
             if (data.type === "game_start") {
+                console.log(`[DEBUG-FRONTEND] game_start event received. Transitioning to PLAYING.`);
+                stopSelectionTimer();
+                currentRound = data.round_number || (currentRound); 
+                document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
-                document.getElementById('revealed-name').innerText = "";
+                document.getElementById('lobby-waiting-area').classList.add('hidden');
+                document.getElementById('game-area').classList.remove('hidden');
+                setupGameUI(data.display, data.full_movie);
+                startTimer(data.time_left || 300);
                 updateDrawerStatus(data.drawer_name);
                 setupGameUI(data.display, data.full_movie);
-                startTimer(300); 
+                startTimer(data.time_left || 300);
+                hasWon = false;
+                console.log(`[DEBUG-FRONTEND] Game started. Drawer: ${data.drawer_name}, Timer: ${data.time_left}s`);
             }
-
             if (data.type === "announcement") {
-                stopTimer(); 
+                stopTimer();
+                stopSelectionTimer();
                 showAnnouncement(data.message, data.reveal);
             }
-
             if (data.type === "drawing" && myRole === "guesser") {
                 if (data.isNewPath) ctx.beginPath();
                 draw(data.x, data.y, data.tool, data.color);
             }
             if (data.type === "clear") ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
-
+        function updatePlayerList(players) {
+            const listContainer = document.getElementById('player-list');
+            listContainer.innerHTML = "";
+            const drawerStatus = document.getElementById('drawer-status').dataset.drawerName;
+            players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = "player-item" + (p.name === myName ? " is-me" : "");
+                const drawerIcon = (p.name === drawerStatus) ? " ✏️" : "";
+                div.innerHTML = `
+                    <span class="player-name">${p.name}${drawerIcon}</span>
+                    <span class="player-score">${p.score} pts</span>
+                `;
+                listContainer.appendChild(div);
+            });
+        }
         function startTimer(seconds) {
+            console.log('[DEBUG] startTimer called with', seconds);
             stopTimer();
             timeLeft = seconds;
             document.getElementById('timer-display').classList.remove('hidden');
             updateTimerDisplay();
             countdownInterval = setInterval(() => {
                 timeLeft--;
+                console.log('[DEBUG] startTimer tick', timeLeft);
                 if (timeLeft <= 0) {
                     stopTimer();
                 }
                 updateTimerDisplay();
             }, 1000);
         }
-
         function stopTimer() {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-            }
+            if (countdownInterval) clearInterval(countdownInterval);
             document.getElementById('timer-display').classList.add('hidden');
-            document.getElementById('time-left').classList.remove('timer-low');
         }
-
-        function updateTimerDisplay() {
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            const timerSpan = document.getElementById('time-left');
-            timerSpan.innerText = display;
-            if (timeLeft <= 30) {
-                timerSpan.classList.add('timer-low');
+        let selectionInterval = null;
+        let selectionTimeLeft = 0;
+        function startSelectionTimer(seconds) {
+            console.log('[DEBUG] startSelectionTimer called with', seconds);
+            if (selectionInterval) clearInterval(selectionInterval);
+            selectionTimeLeft = seconds;
+            if (selectionTimeLeft <= 0) {
+                stopSelectionTimer();
+                return;
             }
+            document.getElementById('selection-timer-display').classList.remove('hidden');
+            updateSelectionTimerDisplay();
+            selectionInterval = setInterval(() => {
+                selectionTimeLeft--;
+                console.log('[DEBUG] startSelectionTimer tick', selectionTimeLeft);
+                if (selectionTimeLeft <= 0) {
+                    stopSelectionTimer();
+                }
+                updateSelectionTimerDisplay();
+            }, 1000);
         }
-
+        function stopSelectionTimer() {
+            if (selectionInterval) clearInterval(selectionInterval);
+            document.getElementById('selection-timer-display').classList.add('hidden');
+        }
+        function updateSelectionTimerDisplay() {
+            const mins = Math.floor(selectionTimeLeft / 60);
+            const secs = selectionTimeLeft % 60;
+            const timerSpan = document.getElementById('selection-time-left');
+            const timerDiv = document.getElementById('selection-timer-display');
+            timerSpan.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            if (selectionTimeLeft <= 30) timerDiv.classList.add('timer-low');
+            else timerDiv.classList.remove('timer-low');
+        }
+        function updateTimerDisplay() {
+            const mins = Math.floor(timeLeft / 60);
+            const secs = timeLeft % 60;
+            const timerSpan = document.getElementById('time-left');
+            const timerDiv = document.getElementById('timer-display');
+            timerSpan.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            if (timeLeft <= 30) timerDiv.classList.add('timer-low');
+            else timerDiv.classList.remove('timer-low');
+        }
         function showAnnouncement(msg, reveal) {
             document.getElementById('congrats-text').innerText = msg;
             document.getElementById('congrats-area').style.display = "block";
+            const restartBtn = document.querySelector('.btn-restart');
+            if (restartBtn) {
+                restartBtn.innerText = `Start Round ${currentRound + 1}`;
+            }
             if (reveal) {
                 document.getElementById('movie-reveal').classList.remove('hidden');
                 document.getElementById('revealed-name').innerText = reveal;
             }
             document.querySelectorAll('.letter-input').forEach(i => i.disabled = true);
         }
-
         function updateDrawerStatus(name) {
             const statusEl = document.getElementById('drawer-status');
             if (!name) return;
-            statusEl.innerText = (name === myName) ? "✏️ You are the Drawer!" : `🎨 ${name} is drawing...`;
-            statusEl.style.color = (name === myName) ? "#2196F3" : "#555";
+            statusEl.dataset.drawerName = name;
+            statusEl.innerText = "Drawer: " + name;
+            const sideDrawer = document.getElementById('sidebar-drawer');
+            if (sideDrawer) sideDrawer.innerText = name;
+            if (window.lastPlayerData) {
+                updatePlayerList(window.lastPlayerData);
+            }
         }
-
         function setupGameUI(display, full) {
             targetMovie = full;
+            if (myRole === "drawer") {
+                document.getElementById("drawer-movie").innerText = "Draw this: " + full;
+            } else {
+                document.getElementById("drawer-movie").innerText = "";
+            }
             document.getElementById('setup-area').classList.add('hidden');
             document.getElementById('game-area').classList.remove('hidden');
             createGuessingBoxes(display);
         }
-
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
+        function hostStartGame() {
+            console.log(`[DEBUG-FRONTEND] Host clicked START GAME button`);
+            const playerCount = window.lastPlayerData ? window.lastPlayerData.length : 0;
+            if (playerCount < 2) {
+                const errorDiv = document.getElementById('start-error');
+                errorDiv.innerText = "❌ At least 2 players are required to start the game.";
+                errorDiv.classList.remove('hidden');
+                showToast("⚠️ At least 2 players are required to start the game.");
+                return;
+            }
+            ws.send(JSON.stringify({type: "start_game"}));
+            console.log(`[DEBUG-FRONTEND] Sent start_game event to server`);
+        }
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
-            if(val) ws.send(JSON.stringify({type: "set_movie", movie: val}));
+            let showVowels = document.getElementById('hintToggle').checked;
+            if(val) {
+                ws.send(JSON.stringify({
+                    type: "set_movie",
+                    movie: val,
+                    show_vowels: showVowels
+                }));
+            }
         }
-
         function createGuessingBoxes(displayStr) {
             let container = document.getElementById('movie-display'); 
             container.innerHTML = "";
             displayStr.split("").forEach((char, index) => {
                 if (char === " ") {
-                    let div = document.createElement('div'); 
-                    div.className = "space"; 
-                    container.appendChild(div);
+                    let div = document.createElement('div'); div.className = "space"; container.appendChild(div);
                 } else {
                     let input = document.createElement('input');
-                    input.className = "letter-input"; 
-                    input.maxLength = 1; 
-                    input.dataset.index = index;
+                    input.className = "letter-input"; input.maxLength = 1; input.dataset.index = index;
                     if (char !== "_") { 
-                        input.value = char; 
-                        input.disabled = true; 
+                        input.value = char; input.disabled = true; 
                     } else {
                         if (myRole === "drawer") input.disabled = true;
+                        input.onkeydown = (e) => {
+                            if (e.key === " ") { e.preventDefault(); return; }
+                            let inputs = Array.from(document.querySelectorAll('.letter-input'));
+                            let currentIndex = inputs.indexOf(e.target);
+                            if (e.key === "Backspace" && e.target.value === "") {
+                                for (let i = currentIndex - 1; i >= 0; i--) {
+                                    if (!inputs[i].disabled) { inputs[i].focus(); break; }
+                                }
+                            }
+                        };
                         input.oninput = (e) => {
                             let val = e.target.value.toUpperCase();
                             e.target.value = val;
@@ -221,8 +870,7 @@
                             let currentIndex = inputs.indexOf(e.target);
                             for (let i = currentIndex + 1; i < inputs.length; i++) {
                                 if (!inputs[i].disabled && inputs[i].value === "") {
-                                    inputs[i].focus();
-                                    break;
+                                    inputs[i].focus(); break;
                                 }
                             }
                             checkFullWord();
@@ -232,59 +880,183 @@
                 }
             });
         }
-
+        function showMovieOptions(options) {
+            const container = document.getElementById("movie-options");
+            container.innerHTML = "";
+            options.forEach(movie => {
+                let btn = document.createElement("button");
+                btn.className = "btn";
+                btn.style.margin = "5px";
+                btn.innerText = movie;
+                btn.onclick = () => {
+                    const showVowels = document.getElementById('hintToggle').checked;
+                    ws.send(JSON.stringify({
+                        type: "select_movie",
+                        movie: movie,
+                        show_vowels: showVowels
+                    }));
+                    container.innerHTML = "";
+                };
+                container.appendChild(btn);
+            });
+        }
         function checkFullWord() {
             if (document.getElementById('congrats-area').style.display === "block") return;
             let inputs = document.querySelectorAll('.letter-input');
             let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
-            inputs.forEach(input => { 
-                guessArr[input.dataset.index] = input.value.toUpperCase(); 
-            });
-            if (guessArr.join("") === targetMovie) {
-                ws.send(JSON.stringify({type: "won", name: myName}));
-            }
+            inputs.forEach(input => { guessArr[input.dataset.index] = input.value.toUpperCase(); });
+            if (guessArr.join("") === targetMovie) ws.send(JSON.stringify({type: "won", name: myName}));
         }
-
-        canvas.onmousedown = (e) => { 
-            if(myRole === "drawer") { 
-                drawing = true; 
-                ctx.beginPath(); 
-                let rect = canvas.getBoundingClientRect();
-                let x = e.clientX - rect.left, y = e.clientY - rect.top;
-                let color = document.getElementById('colorPicker').value;
-                ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: true, color: color }));
-                draw(x, y, currentTool, color);
-            } 
+        function getCanvasCoords(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+        function handleDrawStart(coords) {
+            if (myRole !== "drawer") return;
+            drawing = true;
+            ctx.beginPath();
+            const color = document.getElementById('colorPicker').value;
+            ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: true, color: color }));
+            draw(coords.x, coords.y, currentTool, color);
+        }
+        
+        function handleDrawMove(coords) {
+            if (!drawing || myRole !== "drawer") return;
+            const color = document.getElementById('colorPicker').value;
+            draw(coords.x, coords.y, currentTool, color);
+            ws.send(JSON.stringify({ type: "drawing", x: coords.x, y: coords.y, tool: currentTool, isNewPath: false, color: color }));
+        }
+        canvas.onmousedown = (e) => {
+            e.preventDefault();
+            handleDrawStart(getCanvasCoords(e.clientX, e.clientY));
         };
         canvas.onmouseup = () => { drawing = false; };
+        canvas.onmouseleave = () => { drawing = false; };
         canvas.onmousemove = (e) => {
-            if (!drawing || myRole !== "drawer") return;
-            let rect = canvas.getBoundingClientRect();
-            let x = e.clientX - rect.left, y = e.clientY - rect.top;
-            let color = document.getElementById('colorPicker').value;
-            draw(x, y, currentTool, color);
-            ws.send(JSON.stringify({type: "drawing", x: x, y: y, tool: currentTool, isNewPath: false, color: color }));
+            e.preventDefault();
+            handleDrawMove(getCanvasCoords(e.clientX, e.clientY));
         };
-        
+        canvas.ontouchstart = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (!touch) return;
+            handleDrawStart(getCanvasCoords(touch.clientX, touch.clientY));
+        };
+        canvas.ontouchmove = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (!touch) return;
+            handleDrawMove(getCanvasCoords(touch.clientX, touch.clientY));
+        };
+        canvas.ontouchend = () => { drawing = false; };
         function draw(x, y, tool, color) {
-            ctx.lineWidth = (tool === 'erase') ? 25 : 4; 
+            ctx.lineWidth = (tool === 'erase') ? 25 : 4;
             ctx.lineCap = "round";
             ctx.strokeStyle = (tool === 'erase') ? "#ffffff" : color;
-            ctx.lineTo(x, y); 
-            ctx.stroke(); 
+            ctx.lineTo(x, y);
+            ctx.stroke();
             ctx.moveTo(x, y);
         }
-
         function setTool(t) {
             currentTool = t;
             document.getElementById('drawBtn').classList.toggle('active-tool', t === 'draw');
             document.getElementById('eraseBtn').classList.toggle('active-tool', t === 'erase');
         }
-
         function clearCanvasSync() { 
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             ws.send(JSON.stringify({type: "clear"})); 
         }
+        function generateMovie() { 
+            const section = document.getElementById('sectionSelect').value;
+            ws.send(JSON.stringify({ 
+                type: "random_movie", 
+                section: section 
+            })); 
+        }
+        ws.onclose = () => {
+            stopTimer();
+            document.getElementById('disconnect-overlay').classList.remove('hidden');
+            document.getElementById('drawer-status').innerText = "🔌 Connection Lost";
+        };
+        function leaveGame() {
+            if (confirm("Are you sure you want to leave the room?")) {
+                window.location.href = "/leave";
+            }
+        } 
+        let hasWon = false;
+        function checkFullWord() {
+            if (hasWon) return;
+            if (document.getElementById('congrats-area').style.display === "block") return;
+            let inputs = document.querySelectorAll('.letter-input');
+            let guessArr = targetMovie.split("").map(c => c === " " ? " " : "");
+            inputs.forEach(input => {
+                guessArr[input.dataset.index] = input.value.toUpperCase();
+            });
+            if (guessArr.join("") === targetMovie) {
+                hasWon = true;   
+                ws.send(JSON.stringify({type: "won"}));
+            }
+        }
+        let movieHistory = [];
+        function renderHistory() {
+            const container = document.getElementById("history-list");
+            container.innerHTML = "";
+            if (movieHistory.length === 0) {
+                container.innerHTML = "<p>No movies yet</p>";
+                return;
+            }
+            movieHistory.forEach((movie, index) => {
+                const div = document.createElement("div");
+                div.style.padding = "10px";
+                div.style.marginBottom = "8px";
+                div.style.background = "rgba(255,255,255,0.05)";
+                div.style.borderRadius = "8px";
+                div.innerText = `${index + 1}. ${movie}`;
+                container.appendChild(div);
+            });
+        }
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open-mobile');
+            sidebar.classList.toggle('hidden-mobile');
+        }
+        function toggleHistory() {
+            const modal = document.getElementById("history-modal");
+            const overlay = document.getElementById("history-overlay");
+
+            modal.classList.toggle("hidden");
+            overlay.classList.toggle("hidden");
+        }
     </script>
+    <div id="history-overlay" class="hidden" onclick="toggleHistory()" style="
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 9998;
+    "></div>
+    <div id="history-modal" class="hidden" style="
+        position: fixed;
+        top: 0; right: 0;
+        width: 300px;
+        height: 100%;
+        background: #1e293b;
+        border-left: 1px solid rgba(255,255,255,0.1);
+        padding: 20px;
+        overflow-y: auto;
+        z-index: 9999;
+    ">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">🎬 Movie History</h3>
+            <button onclick="toggleHistory()" class="btn" style="padding:5px 10px;">❌</button>
+        </div>
+        <div id="history-list"></div>
+    </div>
 </body>
 </html>
