@@ -189,15 +189,24 @@
         }
     }
     
-    // If there's an invite code in the URL, pre-fill and show the join UI
     if (inviteCode) {
-        document.getElementById('actionInput').value = 'join';
-        document.getElementById('join-section').style.display = 'block';
-        document.getElementById('roomInput').value = inviteCode.toUpperCase();
-        document.getElementById('roomInput').required = true;
-        document.getElementById('submitBtn').innerText = 'Join Room';
-        document.getElementById('public-settings').style.display = 'none';
-        document.getElementById('timer-selection').style.display = 'none';
+        try {
+            // Decode the obscured code back to normal
+            const decodedCode = atob(inviteCode); 
+            
+            document.getElementById('actionInput').value = 'join';
+            document.getElementById('join-section').style.display = 'block';
+            document.getElementById('roomInput').value = decodedCode.toUpperCase();
+            document.getElementById('roomInput').required = true;
+            document.getElementById('submitBtn').innerText = 'Join Room';
+            document.getElementById('public-settings').style.display = 'none';
+            document.getElementById('timer-selection').style.display = 'none';
+        } catch (e) {
+            // If someone tampers with the URL and breaks the encoding, show an error
+            const errorBox = document.getElementById("error-box");
+            errorBox.style.display = "block";
+            errorBox.innerText = "Invalid or corrupted invite link.";
+        }
     }
     const lobbyWs = new WebSocket(`ws://${window.location.host}/ws/lobby`);
     
