@@ -772,36 +772,69 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
                         "time_left": manager.round_duration 
                     })
     except WebSocketDisconnect:
-        
-        name = manager.ws_to_name.get(id(websocket))
-        is_drawer = (name == manager.game_state["drawer_name"])
-        room = rooms[room_id]
-        room.remove_player(name)
-        
-        # Check if disconnected player was the host
-        if name == room.host:
-            new_host = room.transfer_host()
-            if new_host:
-                print(f"[DEBUG-BACKEND] Host {name} disconnected. Transferred host role to {new_host}")
+        print(f"[DEBUG-HOST] {username} disconnected from room {room_id}")
+
+        # Remove websocket connection
+        await manager.disconnect(websocket)
+
+        # Remove player from room player list
+        if username in room.players:
+            room.players.remove(username)
+            print(f"[DEBUG-HOST] Removed {username} from room.players")
+
+        print(f"[DEBUG-HOST] Remaining players: {room.players}")
+        print(f"[DEBUG-HOST] Current host before check: {room.host}")
+        print(f"[DEBUG-HOST] Game started: {room.game_started}")
+
+        # ==========================================
+        # HOST TRANSFER LOGIC
+        # ==========================================
+        if username == room.host and not room.game_started:
+            print(f"[DEBUG-HOST] Host left before game started")
+
+            # Transfer host if players remain
+            if room.players:
+                new_host = room.players[0]
+                room.host = new_host
+
+                print(f"[DEBUG-HOST] New host assigned: {new_host}")
+
+                # Broadcast new host to everyone
                 await manager.broadcast({
                     "type": "host_transferred",
-                    "new_host": new_host,
-                    "message": f"Host left. {new_host} is now the host."
+                    "new_host": new_host
                 })
-            else:
-                print(f"[DEBUG-BACKEND] Host {name} disconnected. No other players to transfer to.")
 
-        if not room.players:
-            # delete empty room
-            print(f"[DEBUG-BACKEND] Room {room_id} is now empty. Deleting room.")
-            del rooms[room_id]
+            else:
+                print(f"[DEBUG-HOST] No players left. Deleting room {room_id}")
+
+                # Delete room completely
+                if room_id in rooms:
+                    del rooms[room_id]
+
+                if room_id in public_rooms:
+                    del public_rooms[room_id]
+
+        # ==========================================
+        # DELETE EMPTY ROOM
+        # ==========================================
+        if len(room.players) == 0:
+            print(f"[DEBUG-HOST] Room empty. Cleaning room {room_id}")
+
+            if room_id in rooms:
+                del rooms[room_id]
+
             if room_id in public_rooms:
                 del public_rooms[room_id]
-        elif is_drawer:
-            # If drawer disconnected and game is running, need to restart
-            await manager.disconnect(websocket)
-        else:
-            await manager.disconnect(websocket)
 
+        # Update public lobby instantly
         await broadcast_lobby_update()
+
+        # Send updated player list
+        await manager.broadcast({
+            "type": "player_list",
+            "players": manager.get_player_data()
+        })
+
+        print(f"[DEBUG-HOST] Disconnect handling completed")
         

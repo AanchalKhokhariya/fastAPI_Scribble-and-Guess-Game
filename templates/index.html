@@ -557,18 +557,34 @@
             }
             
             if (data.type === "host_transferred") {
+
+                console.log("[DEBUG-HOST] Host transferred to:", data.new_host);
+
                 showToast(`👑 ${data.new_host} is now the host!`);
-                
-                // Update host controls visibility
-                if (myName === data.new_host && currentRoomStatus === "LOBBY") {
-                    console.log(`[DEBUG-FRONTEND] I am now the host!`);
-                    document.getElementById('host-controls').classList.remove('hidden');
-                    document.getElementById('guest-waiting').classList.add('hidden');
-                } else if (myName !== data.new_host && currentRoomStatus === "LOBBY") {
-                    console.log(`[DEBUG-FRONTEND] Someone else is now the host.`);
-                    document.getElementById('host-controls').classList.add('hidden');
-                    document.getElementById('guest-waiting').classList.remove('hidden');
-                    document.getElementById('guest-waiting-text').innerText = `Waiting for ${data.new_host} to start...`;
+
+                // If I became host
+                if (myName === data.new_host) {
+
+                    console.log("[DEBUG-HOST] I am the NEW HOST");
+
+                    document.getElementById('host-controls')
+                        .classList.remove('hidden');
+
+                    document.getElementById('guest-waiting')
+                        .classList.add('hidden');
+
+                } else {
+
+                    console.log("[DEBUG-HOST] I am NOT host");
+
+                    document.getElementById('host-controls')
+                        .classList.add('hidden');
+
+                    document.getElementById('guest-waiting')
+                        .classList.remove('hidden');
+
+                    document.getElementById('guest-waiting-text')
+                        .innerText = `Waiting for ${data.new_host} to start...`;
                 }
             }
             if (data.type === "init") {
@@ -819,7 +835,6 @@
         }
         function requestRestart() { ws.send(JSON.stringify({type: "restart"})); }
         function hostStartGame() {
-            console.log(`[DEBUG-FRONTEND] Host clicked START GAME button`);
             const playerCount = window.lastPlayerData ? window.lastPlayerData.length : 0;
             if (playerCount < 2) {
                 const errorDiv = document.getElementById('start-error');
@@ -829,7 +844,6 @@
                 return;
             }
             ws.send(JSON.stringify({type: "start_game"}));
-            console.log(`[DEBUG-FRONTEND] Sent start_game event to server`);
         }
         function sendMovie() {
             let val = document.getElementById('movieInput').value.trim();
