@@ -24,7 +24,7 @@ app.add_middleware(
 
 # Updated Room Model in main.py
 class GameRoom:
-    def __init__(self, room_id: str, host: str, room_type: str, max_players: int):
+    def __init__(self, room_id: str, host: str, room_type: str, max_players: int, duration: int = 5):
         self.room_id = room_id
         self.host = host
         self.room_type = room_type
@@ -32,7 +32,8 @@ class GameRoom:
         self.players: List[str] = []
         self.status = "LOBBY"  # Status: LOBBY, PLAYING
         self.game_started = False
-        self.manager = ConnectionManager()
+        # Pass the duration to the manager!
+        self.manager = ConnectionManager(duration_mins=duration)
 
     def is_full(self):
         return len(self.players) >= self.max_players
@@ -74,7 +75,8 @@ async def join(
     room_code: str = Form(None),
     action: str = Form(...),
     room_type: str = Form("private"),  
-    max_players: int = Form(6)         
+    max_players: int = Form(6),
+    duration: int = Form(5)  # Add this to catch the form input
 ):
     print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type}")
     if action == "create":
@@ -90,7 +92,8 @@ async def join(
             room_id=room_code,
             host=name,
             room_type=room_type,
-            max_players=max_players
+            max_players=max_players,
+            duration=duration  
         )
 
         room.add_player(name)
