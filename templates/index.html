@@ -449,7 +449,10 @@
         function copyInviteLink() {
             const roomCode = getCookie("room_id");
             if (roomCode) {
-                const inviteLink = `${window.location.origin}/?invite=${roomCode}`;
+                // Encode the room code before placing it in the URL
+                const encodedCode = btoa(roomCode); 
+                const inviteLink = `${window.location.origin}/?invite=${encodedCode}`;
+                
                 navigator.clipboard.writeText(inviteLink).then(() => {
                     showToast("✅ Invite link copied!");
                 });
