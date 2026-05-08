@@ -75,16 +75,12 @@ async def join(
     room_code: str = Form(None),
     action: str = Form(...),
     room_type: str = Form("private"),  
-    max_players: int = Form(6),
-    duration: int = Form(5)  # Add this to catch the form input
+    max_players: int = Form(6), # This captures the value from the slider
+    duration: int = Form(5)
 ):
     print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type}")
     if action == "create":
-        # Public rooms can have unlimited players (use high max_players)
-        if room_type == "public":
-            max_players = 100  # No practical limit for public rooms
-        else:
-            max_players = max(2, min(6, max_players))
+        max_players = max(2, min(12, max_players)) 
         
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
