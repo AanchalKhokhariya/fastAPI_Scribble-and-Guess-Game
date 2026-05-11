@@ -332,6 +332,16 @@
         <h2>Connection Lost</h2>
         <button class="btn" onclick="location.href='http://127.0.0.1:8000/'" style="background: var(--accent); border: none; padding: 15px 30px;">Try Reconnecting</button>
     </div>
+    <div id="vote-kick-modal" class="hidden" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--sidebar-bg); padding: 30px; border-radius: 16px; border: 2px solid var(--accent); z-index: 10001; min-width: 320px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align: center;">
+        <h2 id="vote-kick-question" style="margin: 0 0 20px 0; color: var(--text-main); font-size: 1.2rem;">Do you want to kick Player X?</h2>
+        <div id="vote-kick-countdown" style="margin-bottom: 20px; font-size: 1.4rem; font-weight: bold; color: var(--accent);">⏱️ <span id="vote-kick-timer">15</span>s</div>
+        <div style="display: flex; gap: 12px; justify-content: center;">
+            <button id="vote-yes-btn" class="btn" onclick="submitVoteKickVote('yes')" style="background: var(--success); border: none; flex: 1; padding: 12px; font-size: 1rem; font-weight: bold;">✅ Yes</button>
+            <button id="vote-no-btn" class="btn" onclick="submitVoteKickVote('no')" style="background: var(--accent); border: none; flex: 1; padding: 12px; font-size: 1rem; font-weight: bold;">❌ No</button>
+        </div>
+        <div id="vote-kick-status" style="margin-top: 16px; font-size: 0.9rem; color: var(--text-dim);"></div>
+    </div>
+    <div id="vote-kick-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 10000;"></div>
     <div class="main-container">
         <div id="sidebar">
             <div class="sidebar-title">Leaderboard</div>
@@ -587,6 +597,45 @@
                         .innerText = `Waiting for ${data.new_host} to start...`;
                 }
             }
+            if (data.type === "vote_kick_started") {
+                console.log("[DEBUG-FRONTEND] Vote kick started for:", data.target_player);
+                showToast(`🗳️ Vote kick started against ${data.target_player}. You have ${data.timeout_seconds} seconds to vote.`);
+                showVoteKickModal(data.target_player, data.timeout_seconds);
+            }
+            if (data.type === "vote_kick_update") {
+                console.log("[DEBUG-FRONTEND] Vote update - YES:", data.yes_votes, "NO:", data.no_votes);
+                document.getElementById('vote-kick-status').innerText = `Votes: ${data.yes_votes} Yes, ${data.no_votes} No (${data.total_votes}/${data.eligible_voters})`;
+            }
+            if (data.type === "vote_kick_result") {
+                console.log("[DEBUG-FRONTEND] Vote result:", data.result);
+                closeVoteKickModal();
+                
+                if (data.result === "KICK") {
+                    showToast(`⚠️ ${data.target_player} has been kicked! (${data.yes_votes} Yes, ${data.no_votes} No)`);
+                } else if (data.result === "TIE") {
+                    showToast(`🤝 Vote ended in a tie! ${data.target_player} stays. (${data.yes_votes} Yes, ${data.no_votes} No)`);
+                } else {
+                    showToast(`✅ Vote failed. ${data.target_player} stays. (${data.yes_votes} Yes, ${data.no_votes} No)`);
+                }
+            }
+            if (data.type === "vote_kick_cancelled") {
+                console.log("[DEBUG-FRONTEND] Vote kick cancelled:", data.reason);
+                closeVoteKickModal();
+                showToast(`❌ Vote kick cancelled (${data.reason})`);
+            }
+            if (data.type === "player_kicked") {
+                console.log("[DEBUG-FRONTEND] I was kicked!");
+                closeVoteKickModal();
+                showToast("💥 You have been kicked from the room!");
+                setTimeout(() => {
+                    alert("You have been kicked from the room by vote. Returning to lobby...");
+                    window.location.href = "/";
+                }, 2000);
+            }
+            if (data.type === "player_kicked_notification") {
+                console.log("[DEBUG-FRONTEND] Player kicked notification:", data.kicked_player);
+                showToast(`💥 ${data.message}`);
+            }
             if (data.type === "init") {
                 console.log(`[DEBUG-FRONTEND] Init message received. room_status=${data.room_status}, role=${data.role}, player_count=${data.player_count}/${data.max_players}, room_type=${data.room_type}, selection_active=${data.selection_active}, movie_set=${data.movie_set}`);
                 currentMaxPlayers = data.max_players;
@@ -729,10 +778,21 @@
                 const div = document.createElement('div');
                 div.className = "player-item" + (p.name === myName ? " is-me" : "");
                 const drawerIcon = (p.name === drawerStatus) ? " ✏️" : "";
+                
+                // Can only kick others, not yourself
+                const canKick = p.name !== myName;
+                const kickButton = canKick ? `<button class="btn" onclick="initiateVoteKick('${p.name}')" style="padding: 4px 8px; font-size: 0.8rem; background: var(--accent); border: none;">🚫 Kick</button>` : '';
+                
                 div.innerHTML = `
                     <span class="player-name">${p.name}${drawerIcon}</span>
-                    <span class="player-score">${p.score} pts</span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span class="player-score">${p.score} pts</span>
+                        ${kickButton}
+                    </div>
                 `;
+                div.style.display = 'flex';
+                div.style.justifyContent = 'space-between';
+                div.style.alignItems = 'center';
                 listContainer.appendChild(div);
             });
         }
@@ -1004,6 +1064,91 @@
             if (confirm("Are you sure you want to leave the room?")) {
                 window.location.href = "/leave";
             }
+        }
+        
+        // ============= VOTE KICK FUNCTIONALITY =============
+        let currentVoteKickTarget = null;
+        let voteKickTimer = null;
+        let voteKickTimeLeft = 15;
+        let hasVotedInCurrentSession = false;
+        
+        function initiateVoteKick(targetPlayer) {
+            console.log(`[DEBUG-FRONTEND] Initiating vote kick against ${targetPlayer}`);
+            ws.send(JSON.stringify({
+                type: "initiate_vote_kick",
+                target_player: targetPlayer
+            }));
+        }
+        
+        function showVoteKickModal(targetPlayer, timeoutSeconds) {
+            console.log(`[DEBUG-FRONTEND] Showing vote kick modal for ${targetPlayer}`);
+            currentVoteKickTarget = targetPlayer;
+            hasVotedInCurrentSession = false;
+            voteKickTimeLeft = timeoutSeconds;
+            
+            document.getElementById('vote-kick-question').innerText = `Do you want to kick ${targetPlayer}?`;
+            document.getElementById('vote-kick-overlay').classList.remove('hidden');
+            document.getElementById('vote-kick-modal').classList.remove('hidden');
+            
+            // Enable buttons
+            document.getElementById('vote-yes-btn').disabled = false;
+            document.getElementById('vote-no-btn').disabled = false;
+            document.getElementById('vote-yes-btn').style.opacity = '1';
+            document.getElementById('vote-no-btn').style.opacity = '1';
+            document.getElementById('vote-yes-btn').style.cursor = 'pointer';
+            document.getElementById('vote-no-btn').style.cursor = 'pointer';
+            
+            startVoteKickTimer(timeoutSeconds);
+        }
+        
+        function startVoteKickTimer(seconds) {
+            if (voteKickTimer) clearInterval(voteKickTimer);
+            voteKickTimeLeft = seconds;
+            updateVoteKickTimer();
+            voteKickTimer = setInterval(() => {
+                voteKickTimeLeft--;
+                updateVoteKickTimer();
+                if (voteKickTimeLeft <= 0) {
+                    clearInterval(voteKickTimer);
+                }
+            }, 1000);
+        }
+        
+        function updateVoteKickTimer() {
+            document.getElementById('vote-kick-timer').innerText = voteKickTimeLeft;
+        }
+        
+        function submitVoteKickVote(vote) {
+            if (hasVotedInCurrentSession) {
+                showToast("⚠️ You have already voted!");
+                return;
+            }
+            
+            console.log(`[DEBUG-FRONTEND] Submitting vote: ${vote}`);
+            hasVotedInCurrentSession = true;
+            
+            // Disable buttons after voting
+            document.getElementById('vote-yes-btn').disabled = true;
+            document.getElementById('vote-no-btn').disabled = true;
+            document.getElementById('vote-yes-btn').style.opacity = '0.5';
+            document.getElementById('vote-no-btn').style.opacity = '0.5';
+            document.getElementById('vote-yes-btn').style.cursor = 'not-allowed';
+            document.getElementById('vote-no-btn').style.cursor = 'not-allowed';
+            
+            document.getElementById('vote-kick-status').innerText = `You voted ${vote.toUpperCase()}. Waiting for others...`;
+            
+            ws.send(JSON.stringify({
+                type: "vote_kick_response",
+                vote: vote
+            }));
+        }
+        
+        function closeVoteKickModal() {
+            if (voteKickTimer) clearInterval(voteKickTimer);
+            document.getElementById('vote-kick-overlay').classList.add('hidden');
+            document.getElementById('vote-kick-modal').classList.add('hidden');
+            currentVoteKickTarget = null;
+            hasVotedInCurrentSession = false;
         } 
         let hasWon = false;
         function checkFullWord() {
