@@ -33,7 +33,7 @@ class GameRoom:
         self.status = "LOBBY"  # Status: LOBBY, PLAYING
         self.game_started = False
         # Pass the duration to the manager!
-        self.manager = ConnectionManager(duration_mins=duration)
+        self.manager = ConnectionManager(duration_mins=duration, room=self, room_id=room_id)
 
     def is_full(self):
         return len(self.players) >= self.max_players
@@ -187,15 +187,23 @@ def get_random_movie():
 
 
 class ConnectionManager:
-    def __init__(self, duration_mins=5): 
+    def __init__(self, duration_mins=5, room=None, room_id=None): 
         self.active_connections: Dict[str, WebSocket] = {}
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
         self.round_duration = duration_mins * 60
         self.movie_history: List[str] = []
         
+        # Room reference for vote kick operations
+        self.room = room
+        self.room_id = room_id
+        
         self.round_timer_task = None
         self.selection_timer_task = None
+        
+        # Vote Kick State
+        self.active_vote_kick = None  # Will store: {target_player, initiator, votes_yes, votes_no, voters, timeout_task}
+        self.vote_kick_timeout = 15  # seconds
 
         self.game_state = {
             "movie": "",
@@ -382,6 +390,261 @@ class ConnectionManager:
             if is_drawer:
                 
                 return False
+        
+        # Cancel active vote kick if disconnected player was involved
+        if self.active_vote_kick:
+            if name == self.active_vote_kick["target_player"] or name == self.active_vote_kick["initiator"]:
+                print(f"[DEBUG-VOTE] {name} disconnected during vote kick. Cancelling vote session.")
+                await self.cancel_vote_kick(reason="disconnect")
+
+    async def initiate_vote_kick(self, initiator: str, target: str):
+        """Initiate a vote kick session. Returns True if successful, False otherwise."""
+        print(f"[DEBUG-VOTE] Vote kick initiated: {initiator} -> {target}")
+        
+        # Validate
+        if initiator == target:
+            print(f"[DEBUG-VOTE] INVALID: Player cannot kick themselves")
+            return False
+        
+        if target not in self.active_connections:
+            print(f"[DEBUG-VOTE] INVALID: Target player {target} not found")
+            return False
+        
+        # Only one vote kick at a time
+        if self.active_vote_kick:
+            print(f"[DEBUG-VOTE] INVALID: Vote kick already in progress for {self.active_vote_kick['target_player']}")
+            return False
+        
+        # Get eligible voters (all except initiator and target)
+        eligible_voters = [name for name in self.active_connections.keys() 
+                          if name != initiator and name != target]
+        
+        if not eligible_voters:
+            print(f"[DEBUG-VOTE] INVALID: Not enough players to vote")
+            return False
+        
+        # Create vote session
+        self.active_vote_kick = {
+            "target_player": target,
+            "initiator": initiator,
+            "votes_yes": 0,
+            "votes_no": 0,
+            "voters": set(),  # Track who has voted
+            "eligible_voters": set(eligible_voters),
+            "timeout_task": None
+        }
+        
+        print(f"[DEBUG-VOTE] Vote kick started for {target}. Eligible voters: {eligible_voters}")
+        
+        # Broadcast vote kick started to eligible voters only
+        vote_message = {
+            "type": "vote_kick_started",
+            "target_player": target,
+            "initiator": initiator,
+            "timeout_seconds": self.vote_kick_timeout,
+            "eligible_voters": eligible_voters
+        }
+        
+        for name, ws in self.active_connections.items():
+            # Skip initiator and target
+            if name not in [initiator, target]:
+                try:
+                    await ws.send_json(vote_message)
+                except:
+                    continue
+        
+        # Start timeout timer
+        await self._start_vote_kick_timer()
+        return True
+
+    async def _start_vote_kick_timer(self):
+        """Start the 15-second timeout for vote kick."""
+        if not self.active_vote_kick:
+            return
+        
+        async def vote_timeout():
+            try:
+                await asyncio.sleep(self.vote_kick_timeout)
+                await self._resolve_vote_kick()
+            except asyncio.CancelledError:
+                print("[DEBUG-VOTE] Vote kick timer cancelled")
+        
+        self.active_vote_kick["timeout_task"] = asyncio.create_task(vote_timeout())
+
+    async def cast_vote_kick(self, voter: str, vote: str):
+        """Cast a vote (yes/no). Returns True if vote counted, False otherwise."""
+        if not self.active_vote_kick:
+            print(f"[DEBUG-VOTE] No active vote kick to vote on")
+            return False
+        
+        target = self.active_vote_kick["target_player"]
+        initiator = self.active_vote_kick["initiator"]
+        
+        # Validate voter is eligible
+        if voter not in self.active_vote_kick["eligible_voters"]:
+            print(f"[DEBUG-VOTE] {voter} is not eligible to vote")
+            return False
+        
+        # Prevent duplicate votes
+        if voter in self.active_vote_kick["voters"]:
+            print(f"[DEBUG-VOTE] {voter} already voted")
+            return False
+        
+        # Record vote
+        self.active_vote_kick["voters"].add(voter)
+        if vote.lower() == "yes":
+            self.active_vote_kick["votes_yes"] += 1
+            print(f"[DEBUG-VOTE] {voter} voted YES. Current: YES={self.active_vote_kick['votes_yes']} NO={self.active_vote_kick['votes_no']}")
+        else:
+            self.active_vote_kick["votes_no"] += 1
+            print(f"[DEBUG-VOTE] {voter} voted NO. Current: YES={self.active_vote_kick['votes_yes']} NO={self.active_vote_kick['votes_no']}")
+        
+        # Broadcast vote update to all players
+        await self.broadcast({
+            "type": "vote_kick_update",
+            "yes_votes": self.active_vote_kick["votes_yes"],
+            "no_votes": self.active_vote_kick["votes_no"],
+            "total_votes": len(self.active_vote_kick["voters"]),
+            "eligible_voters": len(self.active_vote_kick["eligible_voters"])
+        })
+        
+        # Check if all eligible voters have voted
+        if len(self.active_vote_kick["voters"]) == len(self.active_vote_kick["eligible_voters"]):
+            print(f"[DEBUG-VOTE] All eligible voters have voted. Resolving immediately.")
+            if self.active_vote_kick["timeout_task"]:
+                self.active_vote_kick["timeout_task"].cancel()
+            await self._resolve_vote_kick()
+        
+        return True
+
+    async def _resolve_vote_kick(self):
+        """Resolve the vote kick and apply result."""
+        if not self.active_vote_kick:
+            return
+        
+        target = self.active_vote_kick["target_player"]
+        initiator = self.active_vote_kick["initiator"]
+        yes_votes = self.active_vote_kick["votes_yes"]
+        no_votes = self.active_vote_kick["votes_no"]
+        
+        print(f"[DEBUG-VOTE] Resolving vote kick for {target}. YES={yes_votes} NO={no_votes}")
+        
+        # Vote result logic:
+        # - If yes >= 1 and no == 0: KICK
+        # - If yes >= 1 and no >= 1: TIE (no kick)
+        # - If yes == 0 and no >= 1: NO KICK
+        # - If yes == 0 and no == 0: NO KICK (timeout, no votes)
+        
+        result = None
+        if yes_votes >= 1 and no_votes == 0:
+            result = "KICK"
+            print(f"[DEBUG-VOTE] RESULT: KICK - {target} has been removed")
+        elif yes_votes >= 1 and no_votes >= 1:
+            result = "TIE"
+            print(f"[DEBUG-VOTE] RESULT: TIE - Conflicting votes, no action")
+        else:
+            result = "NO_KICK"
+            print(f"[DEBUG-VOTE] RESULT: NO_KICK - Insufficient yes votes")
+        
+        # Broadcast result to all
+        await self.broadcast({
+            "type": "vote_kick_result",
+            "target_player": target,
+            "result": result,
+            "yes_votes": yes_votes,
+            "no_votes": no_votes
+        })
+        
+        # Execute kick if result is KICK
+        if result == "KICK":
+            await self._execute_player_kick(target)
+        
+        # Clear vote session
+        self.active_vote_kick = None
+
+    async def _execute_player_kick(self, player_name: str):
+        """Remove player from room and close their connection. Handles host transfer if needed."""
+        print(f"[DEBUG-VOTE] Executing kick for {player_name}")
+        
+        if player_name in self.active_connections:
+            ws = self.active_connections[player_name]
+            
+            # Notify kicked player
+            try:
+                await ws.send_json({
+                    "type": "player_kicked",
+                    "message": "You have been kicked from the room by vote."
+                })
+                await ws.close()
+            except:
+                pass
+            
+            # Remove from connections
+            del self.active_connections[player_name]
+            ws_id = None
+            for wid, name in self.ws_to_name.items():
+                if name == player_name:
+                    ws_id = wid
+                    break
+            if ws_id:
+                del self.ws_to_name[ws_id]
+            
+            print(f"[DEBUG-VOTE] {player_name} has been disconnected")
+            
+            # Handle host transfer if the kicked player was the host
+            if self.room and player_name == self.room.host and not self.room.game_started:
+                print(f"[DEBUG-VOTE] Kicked player {player_name} was the host. Transferring host role.")
+                if self.room.players:
+                    # Remove from room players list
+                    if player_name in self.room.players:
+                        self.room.players.remove(player_name)
+                    
+                    if self.room.players:
+                        new_host = self.room.players[0]
+                        self.room.host = new_host
+                        print(f"[DEBUG-VOTE] New host assigned: {new_host}")
+                        
+                        # Broadcast host transfer
+                        await self.broadcast({
+                            "type": "host_transferred",
+                            "new_host": new_host
+                        })
+                    else:
+                        print(f"[DEBUG-VOTE] No players left after kick. Deleting room.")
+            else:
+                # Just remove from room players list
+                if self.room and player_name in self.room.players:
+                    self.room.players.remove(player_name)
+            
+            # Broadcast updated player list
+            await self.broadcast({
+                "type": "player_list",
+                "players": self.get_player_data()
+            })
+            
+            # Broadcast kick notification
+            await self.broadcast({
+                "type": "player_kicked_notification",
+                "kicked_player": player_name,
+                "message": f"💥 {player_name} has been kicked by vote!"
+            })
+
+    async def cancel_vote_kick(self, reason: str = "unknown"):
+        """Cancel the current vote kick session."""
+        if not self.active_vote_kick:
+            return
+        
+        if self.active_vote_kick["timeout_task"]:
+            self.active_vote_kick["timeout_task"].cancel()
+        
+        print(f"[DEBUG-VOTE] Vote kick cancelled. Reason: {reason}")
+        
+        await self.broadcast({
+            "type": "vote_kick_cancelled",
+            "reason": reason
+        })
+        
+        self.active_vote_kick = None
 
     async def start_round_timer(self, duration=None):
         if duration is None:
@@ -874,6 +1137,22 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
                         "full_movie": manager.game_state["movie"],
                         "drawer_name": manager.game_state["drawer_name"],
                         "time_left": manager.round_duration 
+                    })
+            elif data["type"] == "initiate_vote_kick":
+                target_player = data.get("target_player")
+                success = await manager.initiate_vote_kick(name, target_player)
+                if not success:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Cannot initiate vote kick. Either a vote is already in progress or invalid target."
+                    })
+            elif data["type"] == "vote_kick_response":
+                vote = data.get("vote")  # "yes" or "no"
+                success = await manager.cast_vote_kick(name, vote)
+                if not success:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Cannot vote. Either you've already voted or the vote session has ended."
                     })
     except WebSocketDisconnect:
         print(f"[DEBUG-HOST] {username} disconnected from room {room_id}")
