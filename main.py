@@ -68,6 +68,7 @@ class GameRoom:
 
 public_rooms: Dict[str, GameRoom] = {} 
 lobby_connections: List[WebSocket] = [] 
+public_room_timers: Dict[str, asyncio.Task] = {}
 
 @app.post("/join")
 async def join(
@@ -98,6 +99,13 @@ async def join(
 
         if room_type == "public":
             print(f"[DEBUG] Public Room added to lobby: {room_code}")
+
+            # Start auto-discard timer
+            timer_task = asyncio.create_task(start_public_room_timer(room_code))
+            public_room_timers[room_code] = timer_task
+
+            print(f"[AUTO-DISCARD] 5-minute timer initialized for room: {room_code}")
+
             await broadcast_lobby_update()
 
     elif action == "join":
@@ -121,6 +129,16 @@ async def join(
         name = get_unique_name(name, room.players)
         room.add_player(name)
         print(f"[DEBUG] User {name} joined Room {room_code}. Total players: {len(room.players)}")
+        # Cancel auto-discard timer if another player joined
+        if (
+            room.room_type == "public"
+            and len(room.players) >= 2
+            and room_code in public_room_timers
+        ):
+            print(f"[AUTO-DISCARD] Player joined. Cancelling timer for room: {room_code}")
+
+            public_room_timers[room_code].cancel()
+            del public_room_timers[room_code]
 
         await broadcast_lobby_update()
 
@@ -562,6 +580,88 @@ async def broadcast_lobby_update():
             print(f"[DEBUG] Error sending lobby update: {e}")
             continue
 
+async def cleanup_public_room(room_id: str):
+    """
+    Completely removes a public room and all related references.
+    """
+    print(f"[AUTO-DISCARD] Cleaning public room: {room_id}")
+
+    if room_id not in rooms:
+        print(f"[AUTO-DISCARD] Room already removed: {room_id}")
+        return
+
+    room = rooms[room_id]
+
+    # Cancel timer if exists
+    if room_id in public_room_timers:
+        public_room_timers[room_id].cancel()
+        del public_room_timers[room_id]
+        print(f"[AUTO-DISCARD] Timer removed for room: {room_id}")
+
+    # Disconnect active websocket references
+    try:
+        for name, ws in list(room.manager.active_connections.items()):
+            try:
+                await ws.close()
+            except:
+                pass
+    except Exception as e:
+        print(f"[AUTO-DISCARD] Error closing sockets: {e}")
+
+    # Clear manager state
+    room.manager.active_connections.clear()
+    room.manager.ws_to_name.clear()
+    room.players.clear()
+
+    # Remove room references
+    if room_id in rooms:
+        del rooms[room_id]
+
+    if room_id in public_rooms:
+        del public_rooms[room_id]
+
+    print(f"[AUTO-DISCARD] Public room deleted successfully: {room_id}")
+
+    # Update lobby
+    await broadcast_lobby_update()
+
+async def start_public_room_timer(room_id: str):
+    """
+    Starts 5-minute auto discard timer for public rooms.
+    """
+    try:
+        print(f"[AUTO-DISCARD] Timer started for room: {room_id}")
+
+        await asyncio.sleep(300)  # 5 minutes
+
+        # Room might already be deleted
+        if room_id not in rooms:
+            print(f"[AUTO-DISCARD] Room already gone: {room_id}")
+            return
+
+        room = rooms[room_id]
+
+        # ONLY discard if host is alone
+        if (
+            room.room_type == "public"
+            and not room.game_started
+            and len(room.players) <= 1
+        ):
+            print(f"[AUTO-DISCARD] No players joined. Removing room: {room_id}")
+
+            await cleanup_public_room(room_id)
+
+        else:
+            print(
+                f"[AUTO-DISCARD] Room survived timer: {room_id} | Players: {len(room.players)}"
+            )
+
+    except asyncio.CancelledError:
+        print(f"[AUTO-DISCARD] Timer cancelled for room: {room_id}")
+
+    except Exception as e:
+        print(f"[AUTO-DISCARD] Timer error for room {room_id}: {e}")
+
 @app.websocket("/ws/lobby")
 async def lobby_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -664,6 +764,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
                         print(f"[DEBUG-BACKEND] Host {username} starting room {room_id} with {len(room.players)} players")
                         room.status = "PLAYING"
                         room.game_started = True
+
+                        # Cancel auto-discard timer once game starts
+                        if room_id in public_room_timers:
+                            print(f"[AUTO-DISCARD] Game started. Cancelling timer for room: {room_id}")
+
+                            public_room_timers[room_id].cancel()
+                            del public_room_timers[room_id]
+
                         await manager.restart_game() 
                         await broadcast_lobby_update()
                     else:
@@ -812,16 +920,36 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
                     del public_rooms[room_id]
 
         # ==========================================
-        # DELETE EMPTY ROOM
+        # RESTART AUTO-DISCARD TIMER
         # ==========================================
-        if len(room.players) == 0:
-            print(f"[DEBUG-HOST] Room empty. Cleaning room {room_id}")
+        if (
+            room_id in rooms
+            and room.room_type == "public"
+            and not room.game_started
+        ):
+            # If only one player remains, restart timer
+            if len(room.players) == 1:
 
-            if room_id in rooms:
-                del rooms[room_id]
+                if room_id not in public_room_timers:
 
-            if room_id in public_rooms:
-                del public_rooms[room_id]
+                    print(
+                        f"[AUTO-DISCARD] Only one player left in room {room_id}. Restarting timer."
+                    )
+
+                    task = asyncio.create_task(start_public_room_timer(room_id))
+                    public_room_timers[room_id] = task
+
+            # Cancel timer if room recovered
+            elif len(room.players) >= 2:
+
+                if room_id in public_room_timers:
+
+                    print(
+                        f"[AUTO-DISCARD] Room recovered with multiple players. Cancelling timer: {room_id}"
+                    )
+
+                    public_room_timers[room_id].cancel()
+                    del public_room_timers[room_id]
 
         # Update public lobby instantly
         await broadcast_lobby_update()
