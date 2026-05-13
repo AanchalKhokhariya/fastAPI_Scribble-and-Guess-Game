@@ -426,6 +426,8 @@
     </div>
     <script>
         let currentRound = 0;
+        let totalRounds = 3;  // Default, will be updated from init
+        
         function getCookie(name) {
             let value = `; ${document.cookie}`;
             let parts = value.split(`; ${name}=`);
@@ -436,6 +438,11 @@
         const currentRoom = getCookie("room_id");
         console.log(`[DEBUG-FRONTEND] Page loaded. Username: ${myName}, Room: ${currentRoom}`);
         document.getElementById('room-display').innerText = "ROOM: " + currentRoom;
+        
+        function updateRoundDisplay() {
+            document.getElementById('round-display').innerText = `ROUND: ${currentRound} / ${totalRounds}`;
+        }
+        
         let protocol = window.location.protocol === "https:" ? "wss" : "ws";
         let ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
         let canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
@@ -698,8 +705,11 @@
                 }
                 if (data.round_number) {
                     currentRound = data.round_number;
-                    document.getElementById('round-display').innerText = "ROUND: " + currentRound;
                 }
+                if (data.total_rounds) {
+                    totalRounds = data.total_rounds;
+                }
+                updateRoundDisplay();
                 myRole = data.role; targetMovie = "";
                 stopTimer();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -745,8 +755,11 @@
             if (data.type === "game_start") {
                 console.log(`[DEBUG-FRONTEND] game_start event received. Transitioning to PLAYING.`);
                 stopSelectionTimer();
-                currentRound = data.round_number || (currentRound); 
-                document.getElementById('round-display').innerText = "ROUND: " + currentRound;
+                currentRound = data.round_number || (currentRound);
+                if (data.total_rounds) {
+                    totalRounds = data.total_rounds;
+                }
+                updateRoundDisplay();
                 document.getElementById('congrats-area').style.display = "none";
                 document.getElementById('movie-reveal').classList.add('hidden');
                 document.getElementById('lobby-waiting-area').classList.add('hidden');
@@ -763,6 +776,12 @@
                 stopTimer();
                 stopSelectionTimer();
                 showAnnouncement(data.message, data.reveal);
+            }
+            if (data.type === "game_ended") {
+                console.log("[DEBUG-FRONTEND] Game ended after all rounds. Showing leaderboard.");
+                stopTimer();
+                stopSelectionTimer();
+                showFinalLeaderboard(data.final_scores, data.total_rounds);
             }
             if (data.type === "drawing" && myRole === "guesser") {
                 if (data.isNewPath) ctx.beginPath();
@@ -870,6 +889,69 @@
                 document.getElementById('revealed-name').innerText = reveal;
             }
             document.querySelectorAll('.letter-input').forEach(i => i.disabled = true);
+        }
+        function showFinalLeaderboard(finalScores, totalRounds) {
+            // Create modal for final leaderboard
+            const modal = document.createElement('div');
+            modal.id = 'final-leaderboard-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: var(--sidebar-bg);
+                border: 2px solid var(--success);
+                border-radius: 20px;
+                padding: 40px;
+                z-index: 10001;
+                text-align: center;
+                min-width: 350px;
+                max-width: 500px;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            `;
+            
+            let leaderboardHTML = `
+                <h1 style="color: var(--success); margin-top: 0; font-size: 2rem;">🎉 Game Over!</h1>
+                <p style="color: var(--text-dim); font-size: 1rem; margin: 10px 0 30px 0;">Completed ${totalRounds} rounds</p>
+                <div style="background: #0f172a; border-radius: 12px; padding: 20px; margin-bottom: 30px; text-align: left;">
+            `;
+            
+            // Sort scores in descending order
+            const sorted = [...finalScores].sort((a, b) => b.score - a.score);
+            
+            sorted.forEach((player, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
+                leaderboardHTML += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: ${index < sorted.length - 1 ? '1px solid #334155' : 'none'}; margin-bottom: ${index < sorted.length - 1 ? '12px' : '0'};">
+                        <span style="font-weight: 700; font-size: 1.1rem;">${medal} ${player.name}</span>
+                        <span style="background: var(--accent); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 700;">${player.score} pts</span>
+                    </div>
+                `;
+            });
+            
+            leaderboardHTML += `
+                </div>
+                <button onclick="leaveGame()" class="btn" style="background: var(--success); border: none; padding: 14px 32px; font-size: 1rem; font-weight: bold; cursor: pointer; border-radius: 10px; color: white; width: 100%;">
+                    ← Return to Lobby
+                </button>
+            `;
+            
+            modal.innerHTML = leaderboardHTML;
+            document.body.appendChild(modal);
+            
+            // Add overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'final-leaderboard-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 10000;
+            `;
+            document.body.appendChild(overlay);
         }
         function updateDrawerStatus(name) {
             const statusEl = document.getElementById('drawer-status');

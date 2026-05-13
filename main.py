@@ -24,7 +24,7 @@ app.add_middleware(
 
 # Updated Room Model in main.py
 class GameRoom:
-    def __init__(self, room_id: str, host: str, room_type: str, max_players: int, duration: int = 5):
+    def __init__(self, room_id: str, host: str, room_type: str, max_players: int, duration: int = 5, total_rounds: int = 3):
         self.room_id = room_id
         self.host = host
         self.room_type = room_type
@@ -32,8 +32,10 @@ class GameRoom:
         self.players: List[str] = []
         self.status = "LOBBY"  # Status: LOBBY, PLAYING
         self.game_started = False
-        # Pass the duration to the manager!
-        self.manager = ConnectionManager(duration_mins=duration, room=self, room_id=room_id)
+        self.total_rounds = max(1, min(15, total_rounds))  # Validate: 1-15 rounds
+        self.current_round = 0
+        # Pass the duration and rounds to the manager!
+        self.manager = ConnectionManager(duration_mins=duration, room=self, room_id=room_id, total_rounds=self.total_rounds)
 
     def is_full(self):
         return len(self.players) >= self.max_players
@@ -76,12 +78,14 @@ async def join(
     room_code: str = Form(None),
     action: str = Form(...),
     room_type: str = Form("private"),  
-    max_players: int = Form(6), # This captures the value from the slider
-    duration: int = Form(5)
+    max_players: int = Form(6),
+    duration: int = Form(5),
+    rounds: int = Form(3)  # New: rounds selection
 ):
-    print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type}")
+    print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type} | Rounds: {rounds}")
     if action == "create":
-        max_players = max(2, min(12, max_players)) 
+        max_players = max(2, min(12, max_players))
+        rounds = max(1, min(15, rounds))  # Validate: 1-15 rounds
         
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -90,12 +94,13 @@ async def join(
             host=name,
             room_type=room_type,
             max_players=max_players,
-            duration=duration  
+            duration=duration,
+            total_rounds=rounds  # Pass rounds to GameRoom
         )
 
         room.add_player(name)
         rooms[room_code] = room
-        print(f"[DEBUG] Room Created: {room_code} by {name} | Type: {room_type} (Max: {max_players})")
+        print(f"[DEBUG] Room Created: {room_code} by {name} | Type: {room_type} (Max: {max_players}, Rounds: {rounds})")
 
         if room_type == "public":
             print(f"[DEBUG] Public Room added to lobby: {room_code}")
@@ -187,7 +192,7 @@ def get_random_movie():
 
 
 class ConnectionManager:
-    def __init__(self, duration_mins=5, room=None, room_id=None): 
+    def __init__(self, duration_mins=5, room=None, room_id=None, total_rounds=3): 
         self.active_connections: Dict[str, WebSocket] = {}
         self.ws_to_name: Dict[int, str] = {}
         self.draw_history: List[dict] = []
@@ -197,6 +202,12 @@ class ConnectionManager:
         # Room reference for vote kick operations
         self.room = room
         self.room_id = room_id
+        
+        # Rounds tracking
+        self.total_rounds = max(1, min(15, total_rounds))
+        self.current_round = 0
+        self.drawer_queue = []  # Fair rotation queue
+        self.drawer_queue_index = 0
         
         self.round_timer_task = None
         self.selection_timer_task = None
@@ -232,6 +243,26 @@ class ConnectionManager:
 
     def reset_round(self):
         r.set(f"round:{id(self)}", 0)
+
+    def initialize_drawer_queue(self, player_names: List[str]):
+        """Initialize or rebuild the drawer rotation queue for fair rotation."""
+        self.drawer_queue = player_names.copy()
+        self.drawer_queue_index = 0
+        print(f"[DEBUG-ROUNDS] Initialized drawer queue: {self.drawer_queue}")
+
+    def get_next_drawer(self):
+        """Get the next drawer in fair rotation order."""
+        if not self.drawer_queue:
+            return None
+        
+        if self.drawer_queue_index >= len(self.drawer_queue):
+            # Queue exhausted, reset to beginning
+            self.drawer_queue_index = 0
+        
+        next_drawer = self.drawer_queue[self.drawer_queue_index]
+        self.drawer_queue_index += 1
+        print(f"[DEBUG-ROUNDS] Next drawer: {next_drawer} (index {self.drawer_queue_index - 1}/{len(self.drawer_queue)})")
+        return next_drawer
 
     def set_player_score(self, name: str, points: int):
         current_score = self.get_player_score(name)
@@ -699,7 +730,13 @@ class ConnectionManager:
 
     async def restart_game(self):
         """Start a new round. Handles both initial game start (from lobby) and between-round transitions."""
-        print(f"[DEBUG-BACKEND] restart_game() called. drawer_assigned={self.game_state['drawer_assigned']}, active_connections={len(self.active_connections)}")
+        print(f"[DEBUG-BACKEND] restart_game() called. drawer_assigned={self.game_state['drawer_assigned']}, active_connections={len(self.active_connections)}, current_round={self.current_round}, total_rounds={self.total_rounds}")
+        
+        # Check if all rounds are completed
+        if self.current_round >= self.total_rounds:
+            print(f"[DEBUG-ROUNDS] All {self.total_rounds} rounds completed!")
+            await self.end_game()
+            return
         
         if self.game_state.get("movie"):
             self.movie_history.append(self.game_state["movie"])
@@ -710,6 +747,8 @@ class ConnectionManager:
 
         self.increment_round() 
         new_round = self.get_round()
+        self.current_round = new_round
+        
         if self.round_timer_task:
             self.round_timer_task.cancel()
             self.round_timer_task = None
@@ -724,20 +763,19 @@ class ConnectionManager:
             print(f"[DEBUG-BACKEND] No active connections, returning")
             return
         
-        # Pick drawer: first game or normal rotation
-        old_drawer_name = self.game_state.get("drawer_name")
-        names = list(self.active_connections.keys())
+        # Initialize drawer queue on first round
+        player_names = list(self.active_connections.keys())
+        if not self.drawer_queue:
+            self.initialize_drawer_queue(player_names)
         
-        if not old_drawer_name or not self.game_state["drawer_assigned"]:
-            # Initial game - pick random from all players
-            new_drawer_name = random.choice(names)
-            print(f"[DEBUG-BACKEND] Initial game start - selecting drawer {new_drawer_name} from {names}")
-        else:
-            # Rotate drawer - exclude current drawer if possible
-            if len(names) > 1 and old_drawer_name in names:
-                names.remove(old_drawer_name)
-            new_drawer_name = random.choice(names)
-            print(f"[DEBUG-BACKEND] Rotating drawer from {old_drawer_name} to {new_drawer_name}")
+        # Get next drawer using fair rotation
+        new_drawer_name = self.get_next_drawer()
+        
+        if not new_drawer_name:
+            # Shouldn't happen, but fallback
+            new_drawer_name = random.choice(player_names)
+        
+        print(f"[DEBUG-ROUNDS] Round {new_round}/{self.total_rounds} - Drawer: {new_drawer_name}")
         
         self.game_state["drawer_name"] = new_drawer_name
         self.game_state["drawer_assigned"] = True
@@ -751,7 +789,8 @@ class ConnectionManager:
             await ws.send_json({
                 "type": "init",
                 "role": role,
-                "round_number": new_round, 
+                "round_number": new_round,
+                "total_rounds": self.total_rounds,
                 "movie_set": False,
                 "drawer_name": new_drawer_name,
                 "selection_active": True,
@@ -764,6 +803,17 @@ class ConnectionManager:
                 await ws.send_json(message)
             except:
                 continue
+
+    async def end_game(self):
+        """End the game and show final leaderboard."""
+        print(f"[DEBUG-ROUNDS] Game ended after {self.total_rounds} rounds")
+        final_scores = self.get_player_data()
+        
+        await self.broadcast({
+            "type": "game_ended",
+            "final_scores": final_scores,
+            "total_rounds": self.total_rounds
+        })
 
     async def handle_voluntary_leave(self, name: str):
         if name in self.active_connections:
@@ -999,6 +1049,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Cookie(None),
         "type": "init", 
         "role": role, 
         "round_number": current_round,
+        "total_rounds": manager.total_rounds,
         "room_status": room.status,
         "host_name": room.host,
         "room_type": room.room_type,

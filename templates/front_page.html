@@ -85,6 +85,7 @@
             <input type="hidden" name="action" id="actionInput" value="create">
             <input type="hidden" name="room_type" id="roomTypeInput" value="private">
             <input type="hidden" name="max_players" id="maxPlayersInput" value="4">
+            <input type="hidden" name="rounds" id="roundsInput" value="3">
 
             <div id="room-mode-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; justify-content: center;">
                 <button type="button" class="start-btn" onclick="prepareCreate('private')" style="flex: 1;">Create Private Room</button>
@@ -114,6 +115,16 @@
                     oninput="document.getElementById('duration-val').innerText = this.value">
             </div>
 
+            <div id="rounds-selection" style="margin-bottom: 20px;">
+                <label for="rounds" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
+                    Number of Rounds: <span id="rounds-val" style="color: var(--primary); font-weight: bold;">3</span>
+                </label>
+                <input type="range" name="rounds" id="rounds" min="1" max="15" value="3" 
+                    style="width: 100%; accent-color: var(--primary);"
+                    oninput="setRounds(this.value)">
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">Min: 1 • Max: 15</div>
+            </div>
+
             <div id="button-container" style="display: flex; gap: 10px; flex-direction: column;">
                 <button type="submit" id="submitBtn" class="start-btn">Create Private Room</button>
             </div>
@@ -133,6 +144,7 @@
         document.getElementById('join-section').style.display = 'none';
         document.getElementById('roomInput').required = false;
         document.getElementById('timer-selection').style.display = 'block';
+        document.getElementById('rounds-selection').style.display = 'block';
 
         if (type === 'public') {
             document.getElementById('public-settings').style.display = 'block';
@@ -149,6 +161,7 @@
         document.getElementById('join-section').style.display = 'block';
         document.getElementById('public-settings').style.display = 'none';
         document.getElementById('timer-selection').style.display = 'none';
+        document.getElementById('rounds-selection').style.display = 'none';
         document.getElementById('submitBtn').innerText = 'Join Room';
         document.getElementById('roomInput').required = true;
         if (prefillCode) {
@@ -159,6 +172,11 @@
     function setMaxPlayers(value) {
         document.getElementById('max-players-display').innerText = value;
         document.getElementById('maxPlayersInput').value = value;
+    }
+
+    function setRounds(value) {
+        document.getElementById('rounds-val').innerText = value;
+        document.getElementById('roundsInput').value = value;
     }
 
     function joinPublic(code) {
