@@ -32,7 +32,10 @@ class GameRoom:
         self.players: List[str] = []
         self.status = "LOBBY"  # Status: LOBBY, PLAYING
         self.game_started = False
-        self.total_rounds = max(1, min(15, total_rounds))  # Validate: 1-15 rounds
+        # Validate: only 1, 3, or 5 rounds allowed
+        if total_rounds not in [1, 3, 5]:
+            total_rounds = 3  # Default to 3 if invalid
+        self.total_rounds = total_rounds
         self.current_round = 0
         # Pass the duration and rounds to the manager!
         self.manager = ConnectionManager(duration_mins=duration, room=self, room_id=room_id, total_rounds=self.total_rounds)
@@ -85,7 +88,9 @@ async def join(
     print(f"[DEBUG] Action: {action} | User: {name} | Type: {room_type} | Rounds: {rounds}")
     if action == "create":
         max_players = max(2, min(12, max_players))
-        rounds = max(1, min(15, rounds))  # Validate: 1-15 rounds
+        # Validate: only 1, 3, or 5 rounds allowed
+        if rounds not in [1, 3, 5]:
+            rounds = 3  # Default to 3 if invalid
         
         room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -203,8 +208,10 @@ class ConnectionManager:
         self.room = room
         self.room_id = room_id
         
-        # Rounds tracking
-        self.total_rounds = max(1, min(15, total_rounds))
+        # Rounds tracking - validate: only 1, 3, or 5 rounds allowed
+        if total_rounds not in [1, 3, 5]:
+            total_rounds = 3  # Default to 3 if invalid
+        self.total_rounds = total_rounds
         self.current_round = 0
         self.drawer_queue = []  # Fair rotation queue
         self.drawer_queue_index = 0
