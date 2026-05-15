@@ -64,7 +64,19 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(255, 71, 87, 0.4);
         }
-    </style>
+        .rounds-btn {
+            transition: all 0.2s ease;
+        }
+        .rounds-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        .active-rounds {
+            background-color: var(--primary) !important;
+            border-color: var(--primary) !important;
+            color: white !important;
+        }
+        </style>
 </head>
 <body>
     <div class="login-card">
@@ -116,13 +128,15 @@
             </div>
 
             <div id="rounds-selection" style="margin-bottom: 20px;">
-                <label for="rounds" style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-dim);">
+                <label style="display: block; margin-bottom: 12px; font-size: 14px; color: var(--text-dim);">
                     Number of Rounds: <span id="rounds-val" style="color: var(--primary); font-weight: bold;">3</span>
                 </label>
-                <input type="range" name="rounds" id="rounds" min="1" max="15" value="3" 
-                    style="width: 100%; accent-color: var(--primary);"
-                    oninput="setRounds(this.value)">
-                <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">Min: 1 • Max: 15</div>
+                <div style="display: flex; gap: 10px; justify-content: space-between;">
+                    <button type="button" class="rounds-btn" onclick="selectRounds(1)" data-rounds="1" style="flex: 1; padding: 12px 16px; border: 2px solid #334155; background: #0f172a; color: var(--text-main); border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">1 Round</button>
+                    <button type="button" class="rounds-btn active-rounds" onclick="selectRounds(3)" data-rounds="3" style="flex: 1; padding: 12px 16px; border: 2px solid var(--primary); background: var(--primary); color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">3 Rounds</button>
+                    <button type="button" class="rounds-btn" onclick="selectRounds(5)" data-rounds="5" style="flex: 1; padding: 12px 16px; border: 2px solid #334155; background: #0f172a; color: var(--text-main); border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">5 Rounds</button>
+                </div>
+                <input type="hidden" name="rounds" id="rounds" value="3">
             </div>
 
             <div id="button-container" style="display: flex; gap: 10px; flex-direction: column;">
@@ -177,6 +191,36 @@
     function setRounds(value) {
         document.getElementById('rounds-val').innerText = value;
         document.getElementById('roundsInput').value = value;
+    }
+
+    function selectRounds(rounds) {
+        // Validate that only 1, 3, or 5 are allowed
+        if (![1, 3, 5].includes(rounds)) {
+            console.error(`Invalid rounds selection: ${rounds}. Only 1, 3, or 5 are allowed.`);
+            return;
+        }
+        
+        // Update hidden input
+        document.getElementById('rounds').value = rounds;
+        document.getElementById('roundsInput').value = rounds;
+        
+        // Update display
+        document.getElementById('rounds-val').innerText = rounds;
+        
+        // Update button styling
+        document.querySelectorAll('.rounds-btn').forEach(btn => {
+            if (parseInt(btn.getAttribute('data-rounds')) === rounds) {
+                btn.classList.add('active-rounds');
+                btn.style.borderColor = 'var(--primary)';
+                btn.style.backgroundColor = 'var(--primary)';
+                btn.style.color = 'white';
+            } else {
+                btn.classList.remove('active-rounds');
+                btn.style.borderColor = '#334155';
+                btn.style.backgroundColor = '#0f172a';
+                btn.style.color = 'var(--text-main)';
+            }
+        });
     }
 
     function joinPublic(code) {
